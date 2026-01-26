@@ -79,8 +79,7 @@ const OrbitalCamera: React.FC<{
 
   camera.position.set(x, y, z);
   camera.lookAt(0, 0, 0);
-  camera.rotateZ(dutchAngle); // Rotate around local view axis
-  camera.updateProjectionMatrix();
+  camera.rotateZ(dutchAngle);
 
   return null;
 };
