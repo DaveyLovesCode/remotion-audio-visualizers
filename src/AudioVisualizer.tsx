@@ -175,7 +175,7 @@ export const AudioVisualizer: React.FC = () => {
 
   // Accumulated phase from decay - for evolving/rotating effects
   // Higher decay = faster phase accumulation
-  const phaseSpeed = 0.15; // Radians per frame at max decay
+  const phaseSpeed = 0.5; // Radians per frame at max decay
   const decayPhase = decayPhaseRef.current + decay * phaseSpeed;
   decayPhaseRef.current = decayPhase;
 
