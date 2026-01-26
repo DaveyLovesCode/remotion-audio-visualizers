@@ -4,9 +4,9 @@
 
 Achieve **120 FPS** in the jellyfish scene.
 
-**Current baseline: 37.27 FPS** (measured via actual Remotion studio playback)
+**Current baseline: 54 FPS** (measured via standalone perf test in headless Chrome)
 
-This is a ~3.2x performance improvement target.
+This is a ~2.2x performance improvement target.
 
 ---
 
@@ -48,30 +48,38 @@ This is a ~3.2x performance improvement target.
 From the project root:
 
 ```bash
-node scripts/perf-test.mjs
+npm run perf:test
 ```
 
 This:
-1. Starts Remotion studio on port 3000
-2. Opens headless Chromium to the LiquidCrystal composition
-3. Starts playback and measures actual React render FPS
-4. Reports steady-state performance (excludes warmup samples)
+1. Starts a Vite dev server with the standalone perf test app
+2. Opens headless Chromium via Playwright
+3. Renders the **actual scene components** (JellyfishCore, Tendrils, OceanEnvironment, CausticOverlay, HolographicUI)
+4. Measures FPS for 10 seconds after 3s warmup
+5. Reports steady-state performance
 
 Output JSON:
 
 ```json
 {
-  "averageFps": 37.27,
-  "minFps": 26.27,
-  "maxFps": 45.98,
+  "averageFps": 54.0,
+  "minFps": 52.13,
+  "maxFps": 57.99,
   "samples": [...],
-  "sampleCount": 12
+  "sampleCount": 9
 }
 ```
 
 **The target is `averageFps >= 120`**
 
-Note: The Scene component in `src/LiquidCrystal/LiquidCrystal.tsx` has embedded performance tracking that exposes `window.__perfData` for measurement.
+### Other Commands
+
+- `npm run perf` — Run Vite dev server on :3001 (open in browser to see the scene)
+- `npm run perf:build` — Build standalone bundle to `dist-perf/`
+
+### How It Works
+
+The standalone test (`src/perf/PerfTestApp.tsx`) imports the real React components and renders them with `@react-three/fiber`. Audio is mocked with sine waves. Any changes to the actual components automatically reflect in the perf test—no code duplication.
 
 ---
 
@@ -93,18 +101,6 @@ Follow this cycle until the goal is reached:
 ---
 
 ## Scene Components to Optimize
-
-The test scene (`public/perf-test.html`) contains:
-
-| Component | Description | Optimization Potential |
-|-----------|-------------|----------------------|
-| JellyfishCore | Sphere with vertex displacement shader (simplex noise) | Shader optimization, reduce noise octaves if imperceptible |
-| Particles | 600 points with custom positions | Instancing, GPU-computed positions |
-| Tendrils | 14 tube geometries, rebuilt on animation | Geometry caching, vertex shader animation |
-| Lighting | Point lights + ambient | Baked lighting if possible |
-| Camera | Orbiting animation | Minimal impact |
-
-The actual Remotion scene (`src/LiquidCrystal/`) has additional complexity:
 
 | Component | File | Notes |
 |-----------|------|-------|
