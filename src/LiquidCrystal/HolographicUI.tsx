@@ -1,11 +1,30 @@
-import { useMemo } from "react";
 import type { AudioFrame } from "../audio/types";
 
-// Pre-computed bar data (x positions and base opacities)
-const WAVEFORM_BARS = Array.from({ length: 32 }, (_, i) => ({
-  x: i * 7,
-  baseOpacity: 0.3 + (i / 32) * 0.4,
-}));
+// Generate a wave path with fixed endpoints - wave travels along the line
+function generateWavePath(
+  width: number,
+  centerY: number,
+  amplitude: number,
+  frequency: number,
+  phase: number,
+  points: number = 80
+): string {
+  const step = width / points;
+  let path = `M 0 ${centerY}`;
+
+  for (let i = 1; i <= points; i++) {
+    const t = i / points;
+    const x = i * step;
+    // Envelope: fixed at edges, full amplitude in middle
+    const envelope = Math.sin(t * Math.PI);
+    // Traveling wave: phase increases with position for left-to-right motion
+    const wavePhase = phase - t * Math.PI * 2 * frequency;
+    const y = centerY + Math.sin(wavePhase) * amplitude * envelope;
+    path += ` L ${x.toFixed(1)} ${y.toFixed(1)}`;
+  }
+
+  return path;
+}
 
 interface HolographicUIProps {
   audioFrame: AudioFrame;
@@ -46,16 +65,13 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
   const decay = audioFrame.decay ?? 0;
   const bass = audioFrame.bass;
 
-  // Parallax wobble
-  const wobbleX = Math.sin(time * 0.5) * 6 + Math.sin(time * 1.1) * 3;
-  const wobbleY = Math.cos(time * 0.4) * 5 + Math.cos(time * 0.9) * 2;
+  // Music-driven flex - panels move together as a unit, reacting to bass
+  const flexX = Math.sin(time * 0.3) * 2 + decay * 4;
+  const flexY = Math.cos(time * 0.25) * 1.5 + decay * 3;
 
-  // Zoom scale
-  const zoomScale = 1 + decay * 0.05;
-
-  // Holographic tilt
-  const tiltX = Math.sin(time * 0.3) * 2 + decay * 3;
-  const tiltY = Math.cos(time * 0.25) * 1.5;
+  // Slight tilt for depth - also music reactive
+  const tiltX = Math.sin(time * 0.2) * 1 + decay * 2;
+  const tiltY = Math.cos(time * 0.15) * 0.8 + decay * 1.5;
 
   // Typing effect - characters revealed over time
   const typeSpeed = 8; // chars per second
@@ -81,7 +97,8 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
 
   // Data values
   const freqValue = Math.floor(bass * 999);
-  const depthValue = (20 + Math.sin(time * 0.3) * 5).toFixed(1);
+  // Mariana Trench depth ~10,994m - oscillate around it
+  const depthValue = (10994 + Math.sin(time * 0.3) * 50).toFixed(0);
 
   // Shared glow color
   const glowColor = `rgba(0, 255, 200, ${0.6 + decay * 0.4})`;
@@ -93,12 +110,11 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
       <div
         style={{
           position: "absolute",
-          top: "3%",
-          left: "3%",
-          width: "280px",
+          top: "2%",
+          left: "2%",
+          width: "340px",
           transform: `
-            translate(${wobbleX * 0.8 + glitchOffsetX}px, ${wobbleY * 0.8 + glitchOffsetY}px)
-            scale(${zoomScale})
+            translate(${flexX + glitchOffsetX}px, ${flexY + glitchOffsetY}px)
             perspective(800px)
             rotateX(${tiltX}deg)
             rotateY(${tiltY}deg)
@@ -107,71 +123,72 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
         }}
       >
         {/* Corner bracket - top left */}
-        <svg width="280" height="180" style={{ position: "absolute", top: 0, left: 0 }}>
+        <svg width="340" height="200" style={{ position: "absolute", top: 0, left: 0 }}>
           {/* L-shaped corner bracket */}
           <path
-            d="M 0 60 L 0 0 L 100 0"
+            d="M 0 80 L 0 0 L 140 0"
             fill="none"
             stroke={glowColor}
-            strokeWidth="2"
+            strokeWidth="3"
             style={{ filter: `drop-shadow(${glowShadow})` }}
           />
           {/* Decorative lines */}
-          <line x1="0" y1="70" x2="0" y2="120" stroke={glowColor} strokeWidth="1" opacity="0.5" />
-          <line x1="110" y1="0" x2="180" y2="0" stroke={glowColor} strokeWidth="1" opacity="0.3" />
+          <line x1="0" y1="90" x2="0" y2="150" stroke={glowColor} strokeWidth="1.5" opacity="0.5" />
+          <line x1="150" y1="0" x2="240" y2="0" stroke={glowColor} strokeWidth="1.5" opacity="0.3" />
           {/* Corner accent */}
-          <rect x="0" y="0" width="8" height="8" fill={glowColor} opacity={0.5 + decay * 0.5} />
+          <rect x="0" y="0" width="12" height="12" fill={glowColor} opacity={0.5 + decay * 0.5} />
         </svg>
 
         {/* Content */}
-        <div style={{ padding: "15px 20px", fontFamily: "monospace" }}>
+        <div style={{ padding: "20px 25px", fontFamily: "monospace" }}>
           {/* Title */}
           <div style={{
-            fontSize: "11px",
+            fontSize: "13px",
             color: "rgba(0, 255, 200, 0.5)",
-            letterSpacing: "3px",
-            marginBottom: "8px",
+            letterSpacing: "4px",
+            marginBottom: "10px",
           }}>
             SYSTEM
           </div>
 
-          {/* Typing message */}
+          {/* Typing message - always single line */}
           <div style={{
-            fontSize: "18px",
+            fontSize: "22px",
             color: glowColor,
             textShadow: glowShadow,
             letterSpacing: "2px",
-            minHeight: "24px",
+            minHeight: "28px",
+            whiteSpace: "nowrap",
           }}>
             {displayMessage}
             <span style={{ opacity: Math.sin(time * 8) > 0 ? 1 : 0 }}>_</span>
           </div>
 
           {/* Frequency bar */}
-          <div style={{ marginTop: "20px" }}>
+          <div style={{ marginTop: "24px" }}>
             <div style={{
-              fontSize: "10px",
+              fontSize: "12px",
               color: "rgba(0, 255, 200, 0.4)",
               letterSpacing: "2px",
-              marginBottom: "6px",
+              marginBottom: "8px",
             }}>
               FREQUENCY
             </div>
             <div style={{
-              fontSize: "28px",
+              fontSize: "36px",
               fontWeight: "bold",
               color: glowColor,
               textShadow: glowShadow,
             }}>
               {freqValue.toString().padStart(3, "0")}
-              <span style={{ fontSize: "14px", opacity: 0.6, marginLeft: "4px" }}>Hz</span>
+              <span style={{ fontSize: "18px", opacity: 0.6, marginLeft: "6px" }}>Hz</span>
             </div>
             {/* Bar */}
             <div style={{
-              marginTop: "8px",
-              height: "6px",
+              marginTop: "10px",
+              height: "8px",
               background: "rgba(0, 255, 200, 0.1)",
-              borderRadius: "3px",
+              borderRadius: "4px",
               overflow: "hidden",
             }}>
               <div style={{
@@ -190,13 +207,12 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
       <div
         style={{
           position: "absolute",
-          top: "3%",
-          right: "3%",
-          width: "220px",
+          top: "2%",
+          right: "2%",
+          width: "280px",
           textAlign: "right",
           transform: `
-            translate(${-wobbleX * 0.6 + glitchOffsetX}px, ${wobbleY * 0.7 + glitchOffsetY}px)
-            scale(${zoomScale})
+            translate(${-flexX + glitchOffsetX}px, ${flexY + glitchOffsetY}px)
             perspective(800px)
             rotateX(${tiltX}deg)
             rotateY(${-tiltY}deg)
@@ -205,71 +221,71 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
         }}
       >
         {/* Corner bracket - top right */}
-        <svg width="220" height="140" style={{ position: "absolute", top: 0, right: 0 }}>
+        <svg width="280" height="180" style={{ position: "absolute", top: 0, right: 0 }}>
           <path
-            d="M 220 60 L 220 0 L 140 0"
+            d="M 280 80 L 280 0 L 140 0"
             fill="none"
             stroke={glowColor}
-            strokeWidth="2"
+            strokeWidth="3"
             style={{ filter: `drop-shadow(${glowShadow})` }}
           />
-          <line x1="220" y1="70" x2="220" y2="100" stroke={glowColor} strokeWidth="1" opacity="0.5" />
-          <rect x="212" y="0" width="8" height="8" fill={glowColor} opacity={0.5 + decay * 0.5} />
+          <line x1="280" y1="90" x2="280" y2="140" stroke={glowColor} strokeWidth="1.5" opacity="0.5" />
+          <rect x="268" y="0" width="12" height="12" fill={glowColor} opacity={0.5 + decay * 0.5} />
         </svg>
 
-        <div style={{ padding: "15px 20px", fontFamily: "monospace" }}>
+        <div style={{ padding: "20px 25px", fontFamily: "monospace" }}>
           <div style={{
-            fontSize: "11px",
+            fontSize: "13px",
             color: "rgba(0, 255, 200, 0.5)",
-            letterSpacing: "3px",
-            marginBottom: "8px",
+            letterSpacing: "4px",
+            marginBottom: "10px",
           }}>
             STATUS
           </div>
 
           <div style={{
-            fontSize: "14px",
+            fontSize: "18px",
             color: glowColor,
             textShadow: glowShadow,
             letterSpacing: "1px",
-            minHeight: "20px",
+            minHeight: "24px",
+            whiteSpace: "nowrap",
           }}>
             {displayStatus}
             <span style={{ opacity: Math.sin(time * 10) > 0 ? 1 : 0 }}>_</span>
           </div>
 
-          <div style={{ marginTop: "15px" }}>
+          <div style={{ marginTop: "20px" }}>
             <div style={{
-              fontSize: "10px",
+              fontSize: "12px",
               color: "rgba(0, 255, 200, 0.4)",
               letterSpacing: "2px",
-              marginBottom: "4px",
+              marginBottom: "6px",
             }}>
               DEPTH
             </div>
             <div style={{
-              fontSize: "24px",
+              fontSize: "32px",
               fontWeight: "bold",
               color: glowColor,
               textShadow: glowShadow,
             }}>
               {depthValue}
-              <span style={{ fontSize: "12px", opacity: 0.6, marginLeft: "4px" }}>m</span>
+              <span style={{ fontSize: "16px", opacity: 0.6, marginLeft: "6px" }}>m</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* BOTTOM LEFT - Waveform visualization */}
+      {/* BOTTOM LEFT - Spectrum analyzer */}
       <div
         style={{
           position: "absolute",
-          bottom: "3%",
-          left: "3%",
-          width: "260px",
+          bottom: "2%",
+          left: "2%",
+          width: "340px",
           transform: `
-            translate(${wobbleX * 0.7}px, ${-wobbleY * 0.8}px)
-            scale(${zoomScale})
+            translate(${flexX + glitchOffsetX}px, ${-flexY + glitchOffsetY}px)
             perspective(800px)
             rotateX(${-tiltX}deg)
             rotateY(${tiltY}deg)
@@ -277,44 +293,39 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
           pointerEvents: "none",
         }}
       >
-        <svg width="260" height="100" style={{ position: "absolute", bottom: 0, left: 0 }}>
+        <svg width="340" height="140" style={{ position: "absolute", bottom: 0, left: 0 }}>
           {/* L bracket bottom left */}
           <path
-            d="M 0 40 L 0 100 L 80 100"
+            d="M 0 60 L 0 140 L 140 140"
             fill="none"
             stroke={glowColor}
-            strokeWidth="2"
+            strokeWidth="3"
             style={{ filter: `drop-shadow(${glowShadow})` }}
           />
-          <line x1="90" y1="100" x2="150" y2="100" stroke={glowColor} strokeWidth="1" opacity="0.3" />
-          <rect x="0" y="92" width="8" height="8" fill={glowColor} opacity={0.5 + decay * 0.5} />
+          <line x1="150" y1="140" x2="240" y2="140" stroke={glowColor} strokeWidth="1.5" opacity="0.3" />
+          <rect x="0" y="128" width="12" height="12" fill={glowColor} opacity={0.5 + decay * 0.5} />
         </svg>
 
-        <div style={{ padding: "10px 20px 20px", fontFamily: "monospace" }}>
-          <div style={{
-            fontSize: "10px",
-            color: "rgba(0, 255, 200, 0.4)",
-            letterSpacing: "2px",
-            marginBottom: "10px",
-          }}>
-            SIGNAL
-          </div>
+        <div style={{ padding: "15px 25px 8px" }}>
+          <svg width="215" height="50" style={{ overflow: "visible" }}>
+            {/* Three layered sine waves driven by audio */}
+            {[
+              { baseY: 25, baseAmp: 5, freq: 3, phaseOffset: 0, opacity: 0.9, width: 2.5 },
+              { baseY: 25, baseAmp: 4, freq: 4, phaseOffset: 2, opacity: 0.5, width: 1.5 },
+              { baseY: 25, baseAmp: 3, freq: 5, phaseOffset: 4, opacity: 0.3, width: 1 },
+            ].map((wave, i) => {
+              const phase = time * 8 + wave.phaseOffset + (audioFrame.decayPhase ?? 0) * 2;
+              const amplitude = wave.baseAmp + decay * 14;
 
-          {/* Waveform bars - pre-computed positions */}
-          <svg width="220" height="50" style={{ overflow: "visible" }}>
-            {WAVEFORM_BARS.map((bar, i) => {
-              const phase = time * 6 + i * 0.3;
-              const height = (Math.sin(phase) * 0.5 + 0.5) * (0.3 + decay * 0.7) * 40 + 4;
               return (
-                <rect
+                <path
                   key={i}
-                  x={bar.x}
-                  y={25 - height / 2}
-                  width="5"
-                  height={height}
-                  fill={`rgba(0, 255, 200, ${bar.baseOpacity + decay * 0.3})`}
+                  d={generateWavePath(215, wave.baseY, amplitude, wave.freq, phase)}
+                  fill="none"
+                  stroke={`rgba(0, 255, 200, ${wave.opacity})`}
+                  strokeWidth={wave.width}
                   style={{
-                    filter: decay > 0.3 ? `drop-shadow(0 0 4px rgba(0, 255, 200, 0.6))` : "none",
+                    filter: decay > 0.2 ? `drop-shadow(0 0 ${4 + decay * 6}px rgba(0, 255, 200, ${0.4 + decay * 0.3}))` : "none",
                   }}
                 />
               );
@@ -327,13 +338,12 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
       <div
         style={{
           position: "absolute",
-          bottom: "3%",
-          right: "3%",
-          width: "200px",
+          bottom: "2%",
+          right: "2%",
+          width: "280px",
           textAlign: "right",
           transform: `
-            translate(${-wobbleX * 0.6}px, ${-wobbleY * 0.7}px)
-            scale(${zoomScale})
+            translate(${-flexX + glitchOffsetX}px, ${-flexY + glitchOffsetY}px)
             perspective(800px)
             rotateX(${-tiltX}deg)
             rotateY(${-tiltY}deg)
@@ -341,32 +351,33 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
           pointerEvents: "none",
         }}
       >
-        <svg width="200" height="100" style={{ position: "absolute", bottom: 0, right: 0 }}>
+        <svg width="280" height="160" style={{ position: "absolute", bottom: 0, right: 0 }}>
           <path
-            d="M 200 40 L 200 100 L 120 100"
+            d="M 280 80 L 280 160 L 140 160"
             fill="none"
             stroke={glowColor}
-            strokeWidth="2"
+            strokeWidth="3"
             style={{ filter: `drop-shadow(${glowShadow})` }}
           />
-          <rect x="192" y="92" width="8" height="8" fill={glowColor} opacity={0.5 + decay * 0.5} />
+          <line x1="280" y1="70" x2="280" y2="30" stroke={glowColor} strokeWidth="1.5" opacity="0.5" />
+          <rect x="268" y="148" width="12" height="12" fill={glowColor} opacity={0.5 + decay * 0.5} />
         </svg>
 
-        <div style={{ padding: "10px 20px 20px", fontFamily: "monospace" }}>
+        <div style={{ padding: "20px 25px 30px", fontFamily: "monospace" }}>
           <div style={{
-            fontSize: "10px",
-            color: "rgba(0, 255, 200, 0.4)",
-            letterSpacing: "2px",
-            marginBottom: "8px",
+            fontSize: "13px",
+            color: "rgba(0, 255, 200, 0.5)",
+            letterSpacing: "4px",
+            marginBottom: "12px",
           }}>
             COORDINATES
           </div>
 
           <div style={{
-            fontSize: "12px",
+            fontSize: "18px",
             color: glowColor,
             textShadow: glowShadow,
-            lineHeight: "1.6",
+            lineHeight: "1.8",
           }}>
             <div>X: {(Math.sin(time * 0.2) * 100).toFixed(2)}</div>
             <div>Y: {(Math.cos(time * 0.15) * 100).toFixed(2)}</div>
