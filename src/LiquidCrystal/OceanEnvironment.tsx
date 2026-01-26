@@ -329,20 +329,19 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
   floorMaterial.uniforms.uTravel.value = travel;
   floorMaterial.uniforms.uDecay.value = decay;
 
-  // Seaweed strands - visible across the floor from frame 0
-  // Loop must be long enough that the "pop" happens where seaweed is invisible
-  const seaweedCount = 80;
-  const seaweedLoopLength = 80; // Long loop: far end is tiny, near end is past camera
+  // Seaweed strands - spread wide across the ocean floor
+  const seaweedCount = 50; // Fewer for less density
+  const seaweedLoopLength = 100; // Longer loop = more spread out in Z
   const seaweeds = useMemo(() => {
     return Array.from({ length: seaweedCount }, (_, i) => ({
-      // X spread fits camera FOV
-      x: (seededRandom(i * 37) - 0.5) * 18,
-      // Distribute evenly across loop
-      zOffset: (i / seaweedCount) * seaweedLoopLength + seededRandom(i * 41) * 3,
+      // Wide X spread - way off to left and right
+      x: (seededRandom(i * 37) - 0.5) * 40,
+      // Spread evenly across long loop
+      zOffset: (i / seaweedCount) * seaweedLoopLength + seededRandom(i * 41) * 8,
       // Tall seaweed
-      height: 3.5 + seededRandom(i * 43) * 4.5,
+      height: 3.5 + seededRandom(i * 43) * 5.0,
       phase: seededRandom(i * 47) * Math.PI * 2,
-      thickness: 0.08 + seededRandom(i * 53) * 0.08,
+      thickness: 0.08 + seededRandom(i * 53) * 0.1,
     }));
   }, []);
 
@@ -437,9 +436,8 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
       {seaweeds.map((weed, i) => {
         // Same travel speed as floor - uses unified throttle
         let z = ((weed.zOffset + travel) % seaweedLoopLength);
-        // Range: -65 (far, tiny when it pops) to +15 (past camera before loop)
-        // Camera is at Z≈6, so +15 is behind it
-        z = z - 65;
+        // Range: -80 (way up front) to +20 (way back past camera)
+        z = z - 80;
 
         // Build curved seaweed strand
         const segments = 12;
