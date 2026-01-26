@@ -243,11 +243,11 @@ export const renderFragmentShader = /* glsl */ `
     // Wave intensity - ambient is 0-0.3, beat waves add more
     float waveIntensity = min(vWaveOpacity, 2.0);
 
-    // Colors - barely visible base, bright during beat waves
+    // Colors - barely visible base, intense during beat waves
     vec3 colorBase = vec3(0.15, 0.0, 0.2);   // Very dim purple
     vec3 colorAmbient = vec3(0.3, 0.05, 0.4); // Slightly visible for ambient pockets
-    vec3 colorBright = vec3(1.0, 0.3, 0.9);  // Bright magenta for beat waves
-    vec3 colorHot = vec3(1.0, 0.8, 1.0);     // Hot white-pink for stacked
+    vec3 colorBright = vec3(1.0, 0.5, 1.0);  // Intense magenta for beat waves
+    vec3 colorHot = vec3(1.0, 1.0, 1.0);     // Pure white for stacked
 
     // Multi-stage color based on intensity
     vec3 color;
@@ -255,24 +255,27 @@ export const renderFragmentShader = /* glsl */ `
       // Ambient range: barely visible pockets
       color = mix(colorBase, colorAmbient, waveIntensity / 0.3);
     } else if (waveIntensity < 1.3) {
-      // Beat wave range
-      color = mix(colorAmbient, colorBright, (waveIntensity - 0.3) / 1.0);
+      // Beat wave range - push to bright fast
+      float t = (waveIntensity - 0.3) / 1.0;
+      color = mix(colorAmbient, colorBright, t * t); // Exponential ramp
     } else {
-      // Stacked waves - hot
+      // Stacked waves - white hot
       color = mix(colorBright, colorHot, (waveIntensity - 1.3) / 0.7);
     }
 
     // Depth fade - further = more transparent
     float depthFade = smoothstep(20.0, 5.0, vDepth);
 
-    // Base is barely visible, ambient adds subtle visibility, beat waves pop
+    // Base is barely visible, beat waves are INTENSE
     float alpha;
     if (waveIntensity < 0.3) {
       // Ambient: very subtle
       alpha = depthFade * softEdge * waveIntensity * 0.4;
     } else {
-      // Beat waves: much more visible
-      alpha = depthFade * softEdge * (0.12 + (waveIntensity - 0.3) * 0.7);
+      // Beat waves: maximum intensity
+      float beatStrength = (waveIntensity - 0.3);
+      alpha = depthFade * softEdge * (0.3 + beatStrength * 2.5);
+      color *= 1.0 + beatStrength * 0.5; // Overbright
     }
 
     gl_FragColor = vec4(color, alpha);
