@@ -9,8 +9,8 @@ interface JellyfishCoreProps {
 }
 
 /**
- * INSANE jellyfish bell - contracts HARD on beats, shoots out spikes,
- * internal glow that PULSES, wild vertex displacement
+ * Jellyfish bell - organic pulsing, refined intensity
+ * Contracts on beats, beautiful displacement, internal glow
  */
 export const JellyfishCore: React.FC<JellyfishCoreProps> = ({
   frame,
@@ -43,7 +43,6 @@ export const JellyfishCore: React.FC<JellyfishCoreProps> = ({
         varying vec3 vPosition;
         varying vec3 vWorldPosition;
         varying float vDisplacement;
-        varying float vSpike;
 
         // Simplex noise
         vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -101,33 +100,23 @@ export const JellyfishCore: React.FC<JellyfishCoreProps> = ({
           float verticalPos = position.y;
           float bellFactor = smoothstep(-1.0, 0.5, verticalPos);
 
-          // AGGRESSIVE contraction on beats - squish the bell HARD
-          float contraction = uDecay * uDecay * 0.5 * bellFactor;
+          // Smooth contraction on beats
+          float contraction = uDecay * 0.3 * bellFactor;
 
-          // WILD organic undulation - multiple octaves
-          vec3 noisePos = position * 2.5;
-          noisePos.x += uDecayPhase * 0.8;
-          noisePos.z += uTime * 0.5;
-          float undulation1 = snoise(noisePos) * 0.2;
-          float undulation2 = snoise(noisePos * 2.0 + uTime) * 0.1;
-          float undulation3 = snoise(noisePos * 4.0 - uDecayPhase) * 0.05;
-          float undulation = (undulation1 + undulation2 + undulation3) * (1.0 + uMid * 1.5 + uDecay * 2.0);
+          // Organic undulation - smooth, not chaotic
+          vec3 noisePos = position * 2.0;
+          noisePos.x += uDecayPhase * 0.4;
+          float undulation = snoise(noisePos + uTime * 0.3) * 0.12;
+          undulation += snoise(noisePos * 1.5 + uTime * 0.5) * 0.06;
+          undulation *= (1.0 + uMid * 0.5 + uDecay * 0.8);
 
-          // SPIKES that shoot out on beats - noise-based selection
-          float spikeNoise = snoise(position * 8.0 + uDecayPhase * 2.0);
-          float spikeThreshold = 0.6 - uDecay * 0.3; // More spikes during beats
-          float isSpike = smoothstep(spikeThreshold, spikeThreshold + 0.1, spikeNoise);
-          float spikeLength = isSpike * uDecay * 0.8 * (0.5 + bellFactor * 0.5);
-          vSpike = isSpike * uDecay;
+          // Gentle ripple waves
+          float ripple = sin(verticalPos * 8.0 - uTime * 3.0 - uDecayPhase * 2.0) * 0.04 * uDecay;
 
-          // Ripple waves traveling down - FASTER and more intense
-          float ripple = sin(verticalPos * 12.0 - uTime * 6.0 - uDecayPhase * 4.0) * 0.08 * uDecay;
-          float ripple2 = sin(verticalPos * 8.0 + uTime * 4.0) * 0.04 * uEnergy;
+          // Breathe
+          float breathe = sin(uTime * 1.5) * 0.06;
 
-          // BREATHE - whole thing pulses
-          float breathe = sin(uTime * 2.0) * 0.1 * (1.0 + uDecay);
-
-          float displacement = -contraction + undulation + spikeLength + ripple + ripple2 + breathe;
+          float displacement = -contraction + undulation + ripple + breathe;
           vDisplacement = displacement;
 
           vec3 newPosition = position + normal * displacement;
@@ -152,50 +141,38 @@ export const JellyfishCore: React.FC<JellyfishCoreProps> = ({
         varying vec3 vPosition;
         varying vec3 vWorldPosition;
         varying float vDisplacement;
-        varying float vSpike;
 
         void main() {
           vec3 viewDir = normalize(cameraPosition - vWorldPosition);
 
-          // INTENSE fresnel
-          float fresnel = pow(1.0 - abs(dot(viewDir, vNormal)), 3.5);
+          // Fresnel rim
+          float fresnel = pow(1.0 - abs(dot(viewDir, vNormal)), 3.0);
 
           float verticalGrad = smoothstep(-0.5, 0.5, vPosition.y);
 
-          // VIVID colors that shift with audio
-          vec3 coreColor = vec3(0.0, 0.6 + uDecay * 0.3, 0.5 + uBass * 0.3);
-          vec3 rimColor = vec3(0.0, 0.4, 1.0);
-          vec3 pulseColor = vec3(0.2 + uDecay * 0.8, 1.0, 0.7);
-          vec3 spikeColor = vec3(1.0, 0.5, 1.0); // Hot pink spikes
-          vec3 hotColor = vec3(1.0, 1.0, 1.0);
+          // Beautiful bioluminescent colors
+          vec3 coreColor = vec3(0.0, 0.5, 0.4);
+          vec3 rimColor = vec3(0.0, 0.4, 0.8);
+          vec3 pulseColor = vec3(0.1, 0.9, 0.7);
 
-          vec3 color = mix(coreColor, rimColor, fresnel * 0.7);
+          vec3 color = mix(coreColor, rimColor, fresnel * 0.6);
 
-          // INTENSE pulse glow
-          float pulseIntensity = uDecay * uDecay * 1.5;
+          // Pulse glow on beats
+          float pulseIntensity = uDecay * 0.8;
           color = mix(color, pulseColor, pulseIntensity * verticalGrad);
 
-          // Spike glow - HOT
-          color = mix(color, spikeColor, vSpike * 0.8);
-          color = mix(color, hotColor, vSpike * vSpike * 0.5);
+          // Rim light
+          color += rimColor * fresnel * (0.4 + uDecay * 0.6);
 
-          // Rim light BLAZES on beats
-          color += rimColor * fresnel * (0.6 + uDecay * 1.5);
+          // Internal veins - subtle
+          float veinPattern = sin(vPosition.x * 15.0 + uTime * 2.0 + uDecayPhase) *
+                             sin(vPosition.y * 12.0 - uDecayPhase * 1.5) *
+                             sin(vPosition.z * 14.0 + uTime * 1.5);
+          veinPattern = smoothstep(0.6, 1.0, veinPattern);
+          color += vec3(0.2, 0.8, 0.7) * veinPattern * (0.2 + uDecay * 0.3);
 
-          // Internal veins - FASTER, more visible
-          float veinPattern = sin(vPosition.x * 20.0 + uTime * 4.0 + uDecayPhase * 2.0) *
-                             sin(vPosition.y * 15.0 - uDecayPhase * 3.0) *
-                             sin(vPosition.z * 18.0 + uTime * 3.0);
-          veinPattern = smoothstep(0.5, 1.0, veinPattern);
-          color += vec3(0.3, 1.0, 0.9) * veinPattern * (0.4 + uDecay * 0.6);
-
-          // Electric arcs on high energy
-          float arc = sin(vPosition.x * 50.0 + uTime * 20.0) * sin(vPosition.y * 40.0 - uTime * 15.0);
-          arc = smoothstep(0.9, 1.0, arc) * uEnergy * uDecay;
-          color += vec3(0.5, 1.0, 1.0) * arc * 2.0;
-
-          // Alpha - more opaque when pulsing
-          float alpha = 0.35 + fresnel * 0.5 + uDecay * 0.3 + vSpike * 0.3;
+          // Alpha
+          float alpha = 0.35 + fresnel * 0.45 + uDecay * 0.15;
 
           gl_FragColor = vec4(color, alpha);
         }
@@ -214,17 +191,16 @@ export const JellyfishCore: React.FC<JellyfishCoreProps> = ({
   shaderMaterial.uniforms.uBass.value = bass;
   shaderMaterial.uniforms.uEnergy.value = audioFrame.energy;
 
-  // Rotation accelerates with decay
-  const rotY = time * 0.2 + (audioFrame.decayPhase ?? 0) * 0.3;
-  const rotX = Math.sin(time * 0.3) * 0.1;
+  // Gentle rotation
+  const rotY = time * 0.15 + (audioFrame.decayPhase ?? 0) * 0.15;
 
-  // Scale PUNCHES on beats
+  // Subtle scale pulse
   const baseScale = 1.3;
-  const beatPunch = 1 + decay * 0.25;
+  const beatPunch = 1 + decay * 0.12;
 
   return (
-    <mesh rotation={[rotX, rotY, 0]} scale={baseScale * beatPunch}>
-      <sphereGeometry args={[1, 80, 80]} />
+    <mesh rotation={[0, rotY, 0]} scale={baseScale * beatPunch}>
+      <sphereGeometry args={[1, 64, 64]} />
       <primitive object={shaderMaterial} attach="material" />
     </mesh>
   );

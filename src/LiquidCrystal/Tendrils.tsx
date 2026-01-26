@@ -15,8 +15,8 @@ function seededRandom(seed: number): number {
 }
 
 /**
- * Flowing tendrils hanging from the jellyfish bell
- * Sway organically with mid frequencies
+ * Flowing tendrils - SMOOTH motion with speed pump on beats
+ * Uses accumulated phase so motion flows continuously, beats just accelerate it
  */
 export const Tendrils: React.FC<TendrilsProps> = ({
   frame,
@@ -28,29 +28,39 @@ export const Tendrils: React.FC<TendrilsProps> = ({
   const decay = audioFrame.decay ?? 0;
   const mid = audioFrame.mid;
 
-  // Generate tendril configurations
+  // Accumulated phase - constant flow, speeds up on beats
+  const phaseRef = useRef(0);
+  const lastTimeRef = useRef(0);
+  const deltaTime = time - lastTimeRef.current;
+  const baseSpeed = 1.0;
+  const boostSpeed = 3.0; // Extra speed during beats
+  phaseRef.current += (baseSpeed + decay * boostSpeed) * deltaTime;
+  lastTimeRef.current = time;
+  const phase = phaseRef.current;
+
+  // Generate tendril configurations - LONGER tendrils
   const tendrils = useMemo(() => {
     return Array.from({ length: count }, (_, i) => {
       const angle = (i / count) * Math.PI * 2;
-      const radiusOffset = 0.3 + seededRandom(i * 7) * 0.3;
+      const radiusOffset = 0.35 + seededRandom(i * 7) * 0.25;
       return {
         baseAngle: angle,
         radiusOffset,
-        length: 1.5 + seededRandom(i * 11) * 1.5,
+        length: 2.5 + seededRandom(i * 11) * 1.5, // LONGER
         phaseOffset: seededRandom(i * 13) * Math.PI * 2,
-        thickness: 0.03 + seededRandom(i * 17) * 0.04,
-        segments: 24,
+        thickness: 0.035 + seededRandom(i * 17) * 0.03,
+        segments: 32, // More segments for smoothness
       };
     });
   }, [count]);
 
-  // Shader for glowing tendrils - thicker and more opaque at base
+  // Shader for glowing tendrils
   const tendrilMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
         uDecay: { value: 0 },
-        uMid: { value: 0 },
+        uPhase: { value: 0 },
       },
       vertexShader: `
         varying float vProgress;
@@ -65,19 +75,19 @@ export const Tendrils: React.FC<TendrilsProps> = ({
       fragmentShader: `
         uniform float uTime;
         uniform float uDecay;
-        uniform float uMid;
+        uniform float uPhase;
 
         varying float vProgress;
         varying vec3 vPosition;
 
         void main() {
           // Color gradient along tendril
-          vec3 attachColor = vec3(0.0, 0.9, 0.7);  // Bright at attachment
-          vec3 baseColor = vec3(0.0, 0.6, 0.8);
-          vec3 tipColor = vec3(0.8, 0.2, 1.0);
+          vec3 attachColor = vec3(0.0, 0.8, 0.6);
+          vec3 baseColor = vec3(0.0, 0.5, 0.7);
+          vec3 tipColor = vec3(0.6, 0.2, 0.9);
           vec3 glowColor = vec3(0.0, 1.0, 0.8);
 
-          // Start bright at attachment, then gradient
+          // Smooth gradient
           vec3 color;
           if (vProgress < 0.1) {
             color = mix(attachColor, baseColor, vProgress / 0.1);
@@ -85,20 +95,20 @@ export const Tendrils: React.FC<TendrilsProps> = ({
             color = mix(baseColor, tipColor, (vProgress - 0.1) / 0.9);
           }
 
-          // Glow pulses traveling down
-          float pulse = sin(vProgress * 10.0 - uTime * 4.0);
-          pulse = smoothstep(0.3, 1.0, pulse);
-          color = mix(color, glowColor, pulse * 0.5 * (1.0 + uDecay));
+          // Glow pulses traveling down - uses accumulated phase
+          float pulse = sin(vProgress * 8.0 - uPhase * 2.0);
+          pulse = smoothstep(0.2, 0.8, pulse);
+          color = mix(color, glowColor, pulse * 0.4 * (0.5 + uDecay));
 
           // Alpha: strong at base, fades toward tip
-          float baseAlpha = smoothstep(0.0, 0.15, 0.15 - vProgress) * 0.4; // Extra opacity at base
-          float bodyAlpha = (1.0 - vProgress * 0.7) * (0.4 + uDecay * 0.4);
+          float baseAlpha = smoothstep(0.0, 0.15, 0.15 - vProgress) * 0.5;
+          float bodyAlpha = (1.0 - vProgress * 0.6) * (0.5 + uDecay * 0.3);
           float alpha = baseAlpha + bodyAlpha;
 
-          // Bioluminescent spots
-          float spots = sin(vProgress * 30.0 + uTime * 2.0) * sin(vPosition.x * 20.0);
-          spots = smoothstep(0.8, 1.0, spots);
-          color += vec3(0.5, 1.0, 0.8) * spots * 0.5;
+          // Subtle bioluminescent spots
+          float spots = sin(vProgress * 25.0 + uPhase) * sin(vPosition.x * 15.0 + uPhase * 0.5);
+          spots = smoothstep(0.85, 1.0, spots);
+          color += vec3(0.4, 1.0, 0.8) * spots * 0.3;
 
           gl_FragColor = vec4(color, alpha);
         }
@@ -110,11 +120,10 @@ export const Tendrils: React.FC<TendrilsProps> = ({
     });
   }, []);
 
-  // Attachment node material - glowing spheres where tendrils meet the bell
+  // Attachment node material
   const attachmentMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
       uniforms: {
-        uTime: { value: 0 },
         uDecay: { value: 0 },
       },
       vertexShader: `
@@ -127,7 +136,6 @@ export const Tendrils: React.FC<TendrilsProps> = ({
         }
       `,
       fragmentShader: `
-        uniform float uTime;
         uniform float uDecay;
         varying vec3 vNormal;
         varying vec3 vPosition;
@@ -136,13 +144,13 @@ export const Tendrils: React.FC<TendrilsProps> = ({
           vec3 viewDir = normalize(cameraPosition - vPosition);
           float fresnel = pow(1.0 - abs(dot(viewDir, vNormal)), 2.0);
 
-          vec3 coreColor = vec3(0.0, 0.8, 0.6);
-          vec3 glowColor = vec3(0.0, 1.0, 0.9);
+          vec3 coreColor = vec3(0.0, 0.7, 0.5);
+          vec3 glowColor = vec3(0.0, 1.0, 0.8);
 
           vec3 color = mix(coreColor, glowColor, fresnel);
-          color += glowColor * uDecay * 0.5;
+          color += glowColor * uDecay * 0.4;
 
-          float alpha = 0.6 + fresnel * 0.3 + uDecay * 0.2;
+          float alpha = 0.5 + fresnel * 0.3 + uDecay * 0.2;
 
           gl_FragColor = vec4(color, alpha);
         }
@@ -156,77 +164,68 @@ export const Tendrils: React.FC<TendrilsProps> = ({
 
   tendrilMaterial.uniforms.uTime.value = time;
   tendrilMaterial.uniforms.uDecay.value = decay;
-  tendrilMaterial.uniforms.uMid.value = mid;
-  attachmentMaterial.uniforms.uTime.value = time;
+  tendrilMaterial.uniforms.uPhase.value = phase;
   attachmentMaterial.uniforms.uDecay.value = decay;
 
   return (
     <group position={[0, -0.3, 0]}>
       {tendrils.map((tendril, i) => {
-        // Attachment point position
         const attachX = Math.cos(tendril.baseAngle) * tendril.radiusOffset;
         const attachZ = Math.sin(tendril.baseAngle) * tendril.radiusOffset;
 
-        // Build curve points with organic sway
+        // Build curve points with SMOOTH motion
         const points: THREE.Vector3[] = [];
 
         for (let j = 0; j <= tendril.segments; j++) {
           const t = j / tendril.segments;
 
-          // Base position hanging down
           const baseX = attachX;
           const baseZ = attachZ;
           const y = -t * tendril.length;
 
-          // WILD organic sway - exponential increase down the tendril
-          const swayAmount = Math.pow(t, 1.5) * 1.2;
-          const swaySpeed = 2.0 + mid * 3.0 + decay * 2.0; // FASTER on beats
+          // SMOOTH sway using accumulated phase
+          // This creates continuous flow that speeds up on beats
+          const swayAmount = Math.pow(t, 1.3) * 0.8;
 
-          // Multiple frequencies for chaotic motion
-          const swayX = Math.sin(time * swaySpeed + tendril.phaseOffset + t * 4.0) * swayAmount
-                      + Math.sin(time * swaySpeed * 1.7 + t * 2.0) * swayAmount * 0.4;
-          const swayZ = Math.cos(time * swaySpeed * 0.8 + tendril.phaseOffset + t * 3.5) * swayAmount * 0.7
-                      + Math.cos(time * swaySpeed * 1.3 + t * 1.5) * swayAmount * 0.3;
+          // Single smooth wave using accumulated phase
+          const swayPhase = phase + tendril.phaseOffset;
+          const swayX = Math.sin(swayPhase * 0.8 + t * 2.5) * swayAmount;
+          const swayZ = Math.cos(swayPhase * 0.6 + t * 2.0) * swayAmount * 0.6;
 
-          // WHIP effect on beats - wave that accelerates down
-          const whipPhase = t * 6.0 - time * 10.0 - decay * 8.0;
-          const whipWave = Math.sin(whipPhase) * 0.3 * decay * Math.pow(t, 0.8);
-
-          // Lateral whip
-          const whipLateral = Math.cos(whipPhase * 0.7) * 0.15 * decay * t;
+          // Secondary gentle wave for organic feel
+          const secondaryX = Math.sin(swayPhase * 0.3 + t * 1.2 + i) * swayAmount * 0.25;
+          const secondaryZ = Math.cos(swayPhase * 0.25 + t * 1.0 + i * 0.5) * swayAmount * 0.2;
 
           points.push(new THREE.Vector3(
-            baseX + swayX + whipWave + whipLateral,
+            baseX + swayX + secondaryX,
             y,
-            baseZ + swayZ + whipWave * 0.5
+            baseZ + swayZ + secondaryZ
           ));
         }
 
         const curve = new THREE.CatmullRomCurve3(points);
 
-        // Tendril thickness tapers: thicker at base, thinner at tip
-        const baseThickness = tendril.thickness * 1.8;
+        const baseThickness = tendril.thickness * 1.5;
 
         const tMat = tendrilMaterial.clone();
         tMat.uniforms.uTime.value = time;
         tMat.uniforms.uDecay.value = decay;
-        tMat.uniforms.uMid.value = mid;
+        tMat.uniforms.uPhase.value = phase;
 
         const aMat = attachmentMaterial.clone();
-        aMat.uniforms.uTime.value = time;
         aMat.uniforms.uDecay.value = decay;
 
         return (
           <group key={i}>
-            {/* Attachment node - glowing sphere at base */}
-            <mesh position={[attachX, 0.05, attachZ]} scale={0.08 + decay * 0.02}>
-              <sphereGeometry args={[1, 16, 16]} />
+            {/* Attachment node */}
+            <mesh position={[attachX, 0.05, attachZ]} scale={0.07 + decay * 0.015}>
+              <sphereGeometry args={[1, 12, 12]} />
               <primitive object={aMat} attach="material" />
             </mesh>
 
             {/* Tendril tube */}
             <mesh>
-              <tubeGeometry args={[curve, 20, baseThickness, 8, false]} />
+              <tubeGeometry args={[curve, 24, baseThickness, 8, false]} />
               <primitive object={tMat} attach="material" />
             </mesh>
           </group>

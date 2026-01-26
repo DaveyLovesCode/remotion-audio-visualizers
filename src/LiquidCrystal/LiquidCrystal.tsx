@@ -8,14 +8,14 @@ import { useAudioAnalysis } from "../audio/useAudioAnalysis";
 import type { AudioFrame } from "../audio/types";
 import { JellyfishCore } from "./JellyfishCore";
 import { Tendrils } from "./Tendrils";
-import { Plankton } from "./Plankton";
+import { OceanEnvironment } from "./OceanEnvironment";
 import { CausticOverlay } from "./CausticOverlay";
 import { HolographicUI } from "./HolographicUI";
 
 const AUDIO_SRC = staticFile("music.wav");
 
 /**
- * AGGRESSIVE CAMERA - punches into the jellyfish, swirls around it, gets WILD
+ * Dynamic camera - orbits with beat-reactive speed and zoom
  */
 const UnderwaterCamera: React.FC<{
   frame: number;
@@ -26,48 +26,44 @@ const UnderwaterCamera: React.FC<{
   const time = frame / fps;
 
   const decay = audioFrame.decay ?? 0;
-  const bass = audioFrame.bass;
-  const energy = audioFrame.energy;
 
   // Accumulated angle for orbit - accelerates on beats
   const angleRef = useRef(0);
   const lastTimeRef = useRef(0);
   const deltaTime = time - lastTimeRef.current;
-  const baseSpeed = 0.12;
-  const boostSpeed = 2.5;
+  const baseSpeed = 0.08;
+  const boostSpeed = 1.5;
   angleRef.current += (baseSpeed + decay * boostSpeed) * deltaTime;
   lastTimeRef.current = time;
   const angle = angleRef.current;
 
-  // AGGRESSIVE zoom - punches WAY in on beats, pulls back between
-  const baseRadius = 5;
-  const punchIn = decay * decay * 3.5; // Quadratic for PUNCH
-  const breathe = Math.sin(time * 0.5) * 0.5;
-  const orbitRadius = Math.max(2, baseRadius - punchIn + breathe);
+  // Zoom - punches in on beats
+  const baseRadius = 6;
+  const punchIn = decay * 2.0;
+  const breathe = Math.sin(time * 0.4) * 0.4;
+  const orbitRadius = Math.max(3, baseRadius - punchIn + breathe);
 
-  // Vertical motion - swoops up and down
-  const verticalSwoop = Math.sin(angle * 0.4) * 1.5;
-  const beatLift = decay * 1.2;
+  // Vertical motion
+  const verticalSwoop = Math.sin(angle * 0.3) * 1.0;
+  const beatLift = decay * 0.6;
 
-  // SHAKE on beats - high frequency wobble
-  const shakeIntensity = decay * 0.15;
-  const shakeX = Math.sin(time * 67) * shakeIntensity;
-  const shakeY = Math.cos(time * 73) * shakeIntensity;
-  const shakeZ = Math.sin(time * 59) * shakeIntensity;
+  // Subtle shake on beats
+  const shakeIntensity = decay * 0.08;
+  const shakeX = Math.sin(time * 47) * shakeIntensity;
+  const shakeY = Math.cos(time * 53) * shakeIntensity;
 
-  // Dutch angle - tilts harder on beats
-  const dutchAngle = Math.sin(time * 0.3) * 0.08 + decay * 0.2;
+  // Subtle dutch angle
+  const dutchAngle = Math.sin(time * 0.25) * 0.05 + decay * 0.1;
 
   const x = Math.sin(angle) * orbitRadius + shakeX;
-  const z = Math.cos(angle) * orbitRadius + shakeZ;
+  const z = Math.cos(angle) * orbitRadius;
   const y = verticalSwoop + beatLift + shakeY;
 
-  // Look target shifts slightly - creates parallax feel
-  const lookY = -0.5 + Math.sin(time * 0.2) * 0.3;
-  const lookX = Math.sin(angle * 0.5) * 0.2;
+  // Look at jellyfish center
+  const lookY = -0.6 + Math.sin(time * 0.15) * 0.2;
 
   camera.position.set(x, y, z);
-  camera.lookAt(lookX, lookY, 0);
+  camera.lookAt(0, lookY, 0);
   camera.rotation.z = dutchAngle;
   camera.updateProjectionMatrix();
 
@@ -92,9 +88,9 @@ const Scene: React.FC<{
       <pointLight position={[3, 2, 3]} intensity={0.3} color="#0088ff" />
       <pointLight position={[-3, -2, -3]} intensity={0.2} color="#ff00ff" />
 
+      <OceanEnvironment frame={frame} audioFrame={audioFrame} fps={fps} />
       <JellyfishCore frame={frame} audioFrame={audioFrame} fps={fps} />
-      <Tendrils frame={frame} audioFrame={audioFrame} fps={fps} count={12} />
-      <Plankton frame={frame} audioFrame={audioFrame} fps={fps} count={128} />
+      <Tendrils frame={frame} audioFrame={audioFrame} fps={fps} count={14} />
     </>
   );
 };

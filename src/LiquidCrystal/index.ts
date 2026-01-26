@@ -1,6 +1,6 @@
 export { LiquidCrystal } from "./LiquidCrystal";
 export { JellyfishCore } from "./JellyfishCore";
 export { Tendrils } from "./Tendrils";
-export { Plankton } from "./Plankton";
+export { OceanEnvironment } from "./OceanEnvironment";
 export { CausticOverlay } from "./CausticOverlay";
 export { HolographicUI } from "./HolographicUI";
