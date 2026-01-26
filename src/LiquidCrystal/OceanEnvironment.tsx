@@ -268,7 +268,6 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
         `,
         transparent: true,
         side: THREE.DoubleSide,
-        depthWrite: false,
       });
     });
   }, [gridCellSize, numTiles, tileDepth]);
