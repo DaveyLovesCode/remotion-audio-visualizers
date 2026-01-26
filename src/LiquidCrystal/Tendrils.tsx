@@ -29,12 +29,22 @@ export const Tendrils: React.FC<TendrilsProps> = ({
   const mid = audioFrame.mid;
 
   // Accumulated phase - constant flow, speeds up on beats
+  // Handles Remotion loop/seek by detecting time going backwards
   const phaseRef = useRef(0);
   const lastTimeRef = useRef(0);
-  const deltaTime = time - lastTimeRef.current;
+
   const baseSpeed = 1.0;
-  const boostSpeed = 3.0; // Extra speed during beats
-  phaseRef.current += (baseSpeed + decay * boostSpeed) * deltaTime;
+  const boostSpeed = 3.0;
+
+  // Detect loop/seek - reset if time goes backwards
+  if (time < lastTimeRef.current - 0.05) {
+    phaseRef.current = time * baseSpeed;
+  }
+
+  const deltaTime = Math.min(time - lastTimeRef.current, 0.1);
+  if (deltaTime > 0) {
+    phaseRef.current += (baseSpeed + decay * boostSpeed) * deltaTime;
+  }
   lastTimeRef.current = time;
   const phase = phaseRef.current;
 
@@ -167,13 +177,16 @@ export const Tendrils: React.FC<TendrilsProps> = ({
   tendrilMaterial.uniforms.uPhase.value = phase;
   attachmentMaterial.uniforms.uDecay.value = decay;
 
+  // Tendrils trail BEHIND the jellyfish (in +Z direction)
+  // Jellyfish swims in -Z, so tendrils extend toward +Z
   return (
-    <group position={[0, -0.3, 0]}>
+    <group position={[0, 0, 0.3]} rotation={[-Math.PI / 2, 0, 0]}>
       {tendrils.map((tendril, i) => {
+        // Attach points form a ring at the back of the bell
         const attachX = Math.cos(tendril.baseAngle) * tendril.radiusOffset;
         const attachZ = Math.sin(tendril.baseAngle) * tendril.radiusOffset;
 
-        // Build curve points with SMOOTH motion
+        // Build curve points - tendrils flow backward
         const points: THREE.Vector3[] = [];
 
         for (let j = 0; j <= tendril.segments; j++) {
@@ -181,18 +194,17 @@ export const Tendrils: React.FC<TendrilsProps> = ({
 
           const baseX = attachX;
           const baseZ = attachZ;
+          // Tendrils extend in -Y (which becomes +Z after rotation)
           const y = -t * tendril.length;
 
-          // SMOOTH sway using accumulated phase
-          // This creates continuous flow that speeds up on beats
+          // Smooth sway - creates flowing motion that speeds up on beats
           const swayAmount = Math.pow(t, 1.3) * 0.8;
 
-          // Single smooth wave using accumulated phase
           const swayPhase = phase + tendril.phaseOffset;
           const swayX = Math.sin(swayPhase * 0.8 + t * 2.5) * swayAmount;
           const swayZ = Math.cos(swayPhase * 0.6 + t * 2.0) * swayAmount * 0.6;
 
-          // Secondary gentle wave for organic feel
+          // Secondary wave for organic feel
           const secondaryX = Math.sin(swayPhase * 0.3 + t * 1.2 + i) * swayAmount * 0.25;
           const secondaryZ = Math.cos(swayPhase * 0.25 + t * 1.0 + i * 0.5) * swayAmount * 0.2;
 

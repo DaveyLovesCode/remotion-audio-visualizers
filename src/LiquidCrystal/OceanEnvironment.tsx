@@ -14,8 +14,9 @@ function seededRandom(seed: number): number {
 }
 
 /**
- * Ocean environment - traveling through the deep sea
- * Rushing particles, light streaks, ocean floor, ambient creatures
+ * Ocean environment - jellyfish ripping through the deep sea
+ * Floor scrolls beneath, particles rush past, seaweed sways
+ * Everything oriented relative to jellyfish swim direction (-Z)
  */
 export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
   frame,
@@ -25,53 +26,42 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
   const time = frame / fps;
   const decay = audioFrame.decay ?? 0;
 
-  // Accumulated travel distance - constant motion, faster on beats
+  // THROTTLE - unified speed control
+  // decay acts as the gas pedal: high decay = RIPPING, low decay = cruising
   const travelRef = useRef(0);
   const lastTimeRef = useRef(0);
-  const deltaTime = time - lastTimeRef.current;
-  const baseSpeed = 2.0;
-  const boostSpeed = 8.0;
-  travelRef.current += (baseSpeed + decay * boostSpeed) * deltaTime;
+
+  // SUPERSONIC base speed + massive boost on beats
+  const baseSpeed = 12.0;
+  const boostSpeed = 35.0;
+
+  // Detect loop/seek - if time goes backwards, reset to deterministic base
+  if (time < lastTimeRef.current - 0.05) {
+    travelRef.current = time * baseSpeed;
+  }
+
+  const deltaTime = Math.min(time - lastTimeRef.current, 0.1);
+  if (deltaTime > 0) {
+    const throttle = baseSpeed + decay * boostSpeed;
+    travelRef.current += throttle * deltaTime;
+  }
   lastTimeRef.current = time;
   const travel = travelRef.current;
 
-  // Generate rushing particles
-  const particleCount = 200;
+  // Rushing particles - RIPPING past, loop where invisible
+  const particleCount = 600;
+  const particleLoopLength = 80;
   const particles = useMemo(() => {
     return Array.from({ length: particleCount }, (_, i) => ({
-      x: (seededRandom(i * 3) - 0.5) * 20,
-      y: (seededRandom(i * 5) - 0.5) * 15,
-      zOffset: seededRandom(i * 7) * 30,
+      x: (seededRandom(i * 3) - 0.5) * 16,
+      y: seededRandom(i * 5) * 6 - 2,
+      zOffset: (i / particleCount) * particleLoopLength + seededRandom(i * 7) * 3,
       size: 0.02 + seededRandom(i * 11) * 0.04,
-      brightness: 0.3 + seededRandom(i * 13) * 0.7,
+      brightness: 0.5 + seededRandom(i * 13) * 0.5,
     }));
   }, []);
 
-  // Generate light streaks
-  const streakCount = 30;
-  const streaks = useMemo(() => {
-    return Array.from({ length: streakCount }, (_, i) => ({
-      x: (seededRandom(i * 17) - 0.5) * 16,
-      y: (seededRandom(i * 19) - 0.5) * 12,
-      zOffset: seededRandom(i * 23) * 40,
-      length: 1 + seededRandom(i * 29) * 3,
-      thickness: 0.01 + seededRandom(i * 31) * 0.02,
-    }));
-  }, []);
-
-  // Ocean floor rocks/formations
-  const rockCount = 40;
-  const rocks = useMemo(() => {
-    return Array.from({ length: rockCount }, (_, i) => ({
-      x: (seededRandom(i * 37) - 0.5) * 30,
-      zOffset: seededRandom(i * 41) * 50,
-      scale: 0.3 + seededRandom(i * 43) * 0.8,
-      rotation: seededRandom(i * 47) * Math.PI * 2,
-      type: Math.floor(seededRandom(i * 53) * 3), // 0: cone, 1: sphere, 2: box
-    }));
-  }, []);
-
-  // Particle material
+  // Particle shader
   const particleMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
       uniforms: {
@@ -97,8 +87,10 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
           float dist = length(gl_PointCoord - vec2(0.5));
           if (dist > 0.5) discard;
 
-          float alpha = smoothstep(0.5, 0.1, dist) * vBrightness * (0.4 + uDecay * 0.4);
-          vec3 color = vec3(0.3, 0.8, 0.9) * vBrightness;
+          // Brighter and more visible during beats
+          float intensity = 0.6 + uDecay * 0.6;
+          float alpha = smoothstep(0.5, 0.1, dist) * vBrightness * intensity;
+          vec3 color = vec3(0.4, 0.9, 1.0) * vBrightness * (1.0 + uDecay * 0.5);
 
           gl_FragColor = vec4(color, alpha);
         }
@@ -111,7 +103,7 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
 
   particleMaterial.uniforms.uDecay.value = decay;
 
-  // Create particle geometry with positions
+  // Particle geometry
   const particleGeometry = useMemo(() => {
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(particleCount * 3);
@@ -124,24 +116,32 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
       brightnesses[i] = p.brightness;
     });
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('brightness', new THREE.BufferAttribute(brightnesses, 1));
-
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute("brightness", new THREE.BufferAttribute(brightnesses, 1));
     return geometry;
   }, [particles]);
 
-  // Update particle positions based on travel
+  // Particles RIPPING toward the camera - uses unified throttle
   const positionAttr = particleGeometry.attributes.position as THREE.BufferAttribute;
   particles.forEach((p, i) => {
-    // Particles rush toward camera (negative Z)
-    const loopLength = 30;
-    let z = ((p.zOffset - travel) % loopLength);
-    if (z > 0) z -= loopLength;
+    let z = ((p.zOffset + travel) % particleLoopLength);
+    z = z - 65; // Range: -65 to +15, pop happens far away
     positionAttr.setZ(i, z);
   });
   positionAttr.needsUpdate = true;
 
-  // Streak material
+  // Speed streaks - motion blur lines RIPPING past
+  const streakCount = 80;
+  const streakLoopLength = 80;
+  const streaks = useMemo(() => {
+    return Array.from({ length: streakCount }, (_, i) => ({
+      x: (seededRandom(i * 17) - 0.5) * 14,
+      y: seededRandom(i * 19) * 5 - 1.5,
+      zOffset: (i / streakCount) * streakLoopLength + seededRandom(i * 23) * 3,
+      length: 1.5 + seededRandom(i * 29) * 3,
+    }));
+  }, []);
+
   const streakMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
       uniforms: {
@@ -159,12 +159,14 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
         varying vec2 vUv;
 
         void main() {
-          // Fade at ends
           float fade = smoothstep(0.0, 0.2, vUv.x) * smoothstep(1.0, 0.8, vUv.x);
           float edgeFade = 1.0 - abs(vUv.y - 0.5) * 2.0;
 
-          vec3 color = vec3(0.0, 0.8, 1.0);
-          float alpha = fade * edgeFade * (0.3 + uDecay * 0.5);
+          // Streaks blaze brighter during beats
+          vec3 baseColor = vec3(0.3, 0.8, 1.0);
+          vec3 hotColor = vec3(0.6, 1.0, 1.0);
+          vec3 color = mix(baseColor, hotColor, uDecay);
+          float alpha = fade * edgeFade * (0.3 + uDecay * 0.7);
 
           gl_FragColor = vec4(color, alpha);
         }
@@ -178,7 +180,7 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
 
   streakMaterial.uniforms.uDecay.value = decay;
 
-  // Ocean floor material
+  // Ocean floor - bumpy terrain with scrolling wireframe
   const floorMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
       uniforms: {
@@ -187,50 +189,137 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
         uDecay: { value: 0 },
       },
       vertexShader: `
+        uniform float uTravel;
+
         varying vec2 vUv;
-        varying vec3 vPosition;
+        varying vec3 vWorldPos;
+        varying float vScrollZ;
+
+        // Simplex noise for bumpy terrain
+        vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+        vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+        float snoise(vec3 v) {
+          const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+          const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+          vec3 i = floor(v + dot(v, C.yyy));
+          vec3 x0 = v - i + dot(i, C.xxx);
+          vec3 g = step(x0.yzx, x0.xyz);
+          vec3 l = 1.0 - g;
+          vec3 i1 = min(g.xyz, l.zxy);
+          vec3 i2 = max(g.xyz, l.zxy);
+          vec3 x1 = x0 - i1 + C.xxx;
+          vec3 x2 = x0 - i2 + C.yyy;
+          vec3 x3 = x0 - D.yyy;
+          i = mod289(i);
+          vec4 p = permute(permute(permute(
+            i.z + vec4(0.0, i1.z, i2.z, 1.0))
+            + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+            + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+          float n_ = 0.142857142857;
+          vec3 ns = n_ * D.wyz - D.xzx;
+          vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+          vec4 x_ = floor(j * ns.z);
+          vec4 y_ = floor(j - 7.0 * x_);
+          vec4 x = x_ *ns.x + ns.yyyy;
+          vec4 y = y_ *ns.x + ns.yyyy;
+          vec4 h = 1.0 - abs(x) - abs(y);
+          vec4 b0 = vec4(x.xy, y.xy);
+          vec4 b1 = vec4(x.zw, y.zw);
+          vec4 s0 = floor(b0)*2.0 + 1.0;
+          vec4 s1 = floor(b1)*2.0 + 1.0;
+          vec4 sh = -step(h, vec4(0.0));
+          vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+          vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+          vec3 p0 = vec3(a0.xy, h.x);
+          vec3 p1 = vec3(a0.zw, h.y);
+          vec3 p2 = vec3(a1.xy, h.z);
+          vec3 p3 = vec3(a1.zw, h.w);
+          vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+          p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+          vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+          m = m * m;
+          return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+        }
 
         void main() {
           vUv = uv;
-          vPosition = position;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+
+          // Plane is rotated -90° around X, so position.y maps to world -Z
+          // This is the scroll direction for the RIPPING motion
+          float scrollY = position.y + uTravel;
+          vScrollZ = scrollY;
+
+          // Bumpy terrain using scrolling noise coordinates
+          // position.x = world X, scrollY = world Z (after rotation)
+          vec3 noiseCoord = vec3(position.x * 0.1, scrollY * 0.1, 0.0);
+          float height = snoise(noiseCoord) * 1.0;
+          height += snoise(noiseCoord * 2.5) * 0.4;
+          height += snoise(noiseCoord * 5.0) * 0.15;
+
+          // Displace along the plane's local Z (which becomes world Y after rotation)
+          vec3 displaced = position;
+          displaced.z += height;
+
+          vWorldPos = (modelMatrix * vec4(displaced, 1.0)).xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
         }
       `,
       fragmentShader: `
-        uniform float uTime;
         uniform float uTravel;
         uniform float uDecay;
 
         varying vec2 vUv;
-        varying vec3 vPosition;
+        varying vec3 vWorldPos;
+        varying float vScrollZ; // This is the scrolling Y coord (becomes world Z)
 
         void main() {
-          // Grid pattern that moves with travel
-          vec2 gridUv = vUv * 20.0;
-          gridUv.y += uTravel * 0.5;
-
-          float gridX = smoothstep(0.02, 0.0, abs(fract(gridUv.x) - 0.5));
-          float gridY = smoothstep(0.02, 0.0, abs(fract(gridUv.y) - 0.5));
-          float grid = max(gridX, gridY) * 0.3;
-
           // Distance fade
-          float distFade = smoothstep(30.0, 5.0, -vPosition.z);
+          float distZ = abs(vWorldPos.z);
+          float distX = abs(vWorldPos.x);
+          float distFade = smoothstep(45.0, 8.0, distZ) * smoothstep(35.0, 8.0, distX);
 
-          // Base color - dark ocean floor
-          vec3 baseColor = vec3(0.0, 0.1, 0.15);
-          vec3 gridColor = vec3(0.0, 0.4, 0.5);
-          vec3 glowColor = vec3(0.0, 0.6, 0.8);
+          // WIREFRAME GRID - squares that RIP past
+          float gridScale = 1.8;
+          float lineWidth = 0.06;
 
-          vec3 color = baseColor + gridColor * grid;
-          color += glowColor * grid * uDecay * 0.5;
+          // Grid uses world X and scrolling Y (which is world Z after rotation)
+          float gridX = vWorldPos.x * gridScale;
+          float gridY = vScrollZ * gridScale;
 
-          float alpha = distFade * (0.4 + grid * 0.3);
+          // Lines in BOTH directions for proper squares
+          float distToLineX = abs(fract(gridX + 0.5) - 0.5);
+          float distToLineY = abs(fract(gridY + 0.5) - 0.5);
+
+          float lineX = smoothstep(lineWidth, lineWidth * 0.3, distToLineX);
+          float lineY = smoothstep(lineWidth, lineWidth * 0.3, distToLineY);
+
+          // Combine for grid squares
+          float grid = max(lineX, lineY);
+
+          // Brighten grid on beats
+          float gridIntensity = 0.3 + uDecay * 0.5;
+
+          // Dark terrain base
+          vec3 terrainColor = vec3(0.01, 0.03, 0.05);
+
+          // Wireframe colors
+          vec3 wireColor = vec3(0.0, 0.45, 0.55);
+          vec3 wireGlow = vec3(0.1, 0.7, 0.8);
+
+          // Compose
+          vec3 color = terrainColor;
+          color += wireColor * grid * gridIntensity;
+          color += wireGlow * grid * uDecay * 0.4;
+
+          float alpha = distFade * (0.5 + grid * 0.4);
 
           gl_FragColor = vec4(color, alpha);
         }
       `,
       transparent: true,
-      blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
       depthWrite: false,
     });
@@ -240,40 +329,63 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
   floorMaterial.uniforms.uTravel.value = travel;
   floorMaterial.uniforms.uDecay.value = decay;
 
-  // Rock material
-  const rockMaterial = useMemo(() => {
+  // Seaweed strands - visible across the floor from frame 0
+  // Loop must be long enough that the "pop" happens where seaweed is invisible
+  const seaweedCount = 80;
+  const seaweedLoopLength = 80; // Long loop: far end is tiny, near end is past camera
+  const seaweeds = useMemo(() => {
+    return Array.from({ length: seaweedCount }, (_, i) => ({
+      // X spread fits camera FOV
+      x: (seededRandom(i * 37) - 0.5) * 18,
+      // Distribute evenly across loop
+      zOffset: (i / seaweedCount) * seaweedLoopLength + seededRandom(i * 41) * 3,
+      // Tall seaweed
+      height: 3.5 + seededRandom(i * 43) * 4.5,
+      phase: seededRandom(i * 47) * Math.PI * 2,
+      thickness: 0.08 + seededRandom(i * 53) * 0.08,
+    }));
+  }, []);
+
+  const seaweedMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
       uniforms: {
+        uTime: { value: 0 },
         uDecay: { value: 0 },
       },
       vertexShader: `
+        varying float vProgress;
         varying vec3 vNormal;
-        varying float vDepth;
 
         void main() {
+          vProgress = uv.y;
           vNormal = normalMatrix * normal;
-          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          vDepth = -mvPosition.z;
-          gl_Position = projectionMatrix * mvPosition;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
       fragmentShader: `
+        uniform float uTime;
         uniform float uDecay;
+
+        varying float vProgress;
         varying vec3 vNormal;
-        varying float vDepth;
 
         void main() {
-          // Simple lighting
-          vec3 light = normalize(vec3(0.0, 1.0, 0.5));
-          float diffuse = max(0.0, dot(vNormal, light)) * 0.5 + 0.5;
+          // Gradient from base to tip
+          vec3 baseColor = vec3(0.02, 0.15, 0.1);
+          vec3 tipColor = vec3(0.05, 0.35, 0.25);
+          vec3 glowColor = vec3(0.1, 0.6, 0.4);
 
-          // Distance fade
-          float distFade = smoothstep(25.0, 8.0, vDepth);
+          vec3 color = mix(baseColor, tipColor, vProgress);
 
-          vec3 color = vec3(0.05, 0.15, 0.2) * diffuse;
-          color += vec3(0.0, 0.3, 0.4) * uDecay * 0.3;
+          // Glow on beats
+          color = mix(color, glowColor, uDecay * 0.4 * vProgress);
 
-          float alpha = distFade * 0.6;
+          // Simple rim lighting
+          vec3 viewDir = vec3(0.0, 0.0, 1.0);
+          float rim = 1.0 - abs(dot(vNormal, viewDir));
+          color += vec3(0.0, 0.2, 0.15) * rim * 0.3;
+
+          float alpha = 0.7 - vProgress * 0.3;
 
           gl_FragColor = vec4(color, alpha);
         }
@@ -284,76 +396,85 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
     });
   }, []);
 
-  rockMaterial.uniforms.uDecay.value = decay;
+  seaweedMaterial.uniforms.uTime.value = time;
+  seaweedMaterial.uniforms.uDecay.value = decay;
 
   return (
     <group>
       {/* Rushing particles */}
       <points geometry={particleGeometry} material={particleMaterial} />
 
-      {/* Light streaks */}
+      {/* Speed streaks - RIPPING past along Z axis */}
       {streaks.map((streak, i) => {
-        const loopLength = 40;
-        let z = ((streak.zOffset - travel * 1.5) % loopLength);
-        if (z > 0) z -= loopLength;
+        // Uses unified throttle via travel
+        let z = ((streak.zOffset + travel) % streakLoopLength);
+        z = z - 65; // Range: -65 to +15, pop happens far away
 
-        // Streak gets longer during beats
-        const length = streak.length * (1 + decay * 2);
+        // Streaks elongate on beats for speed effect
+        const length = streak.length * (1 + decay * 4);
+        const sMat = streakMaterial.clone();
+        sMat.uniforms.uDecay.value = decay;
 
         return (
           <mesh
             key={`streak-${i}`}
             position={[streak.x, streak.y, z]}
-            rotation={[0, 0, 0]}
+            rotation={[Math.PI / 2, 0, 0]} // Align along Z axis
           >
-            <planeGeometry args={[length, streak.thickness * (1 + decay)]} />
-            <primitive object={streakMaterial.clone()} attach="material" />
+            <planeGeometry args={[0.02, length]} />
+            <primitive object={sMat} attach="material" />
           </mesh>
         );
       })}
 
-      {/* Ocean floor */}
-      <mesh position={[0, -8, -15]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[40, 60]} />
+      {/* Ocean floor - below the swim path */}
+      <mesh position={[0, -5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[60, 80, 64, 64]} />
         <primitive object={floorMaterial} attach="material" />
       </mesh>
 
-      {/* Floor rocks */}
-      {rocks.map((rock, i) => {
-        const loopLength = 50;
-        let z = ((rock.zOffset - travel * 0.8) % loopLength);
-        if (z > 0) z -= loopLength;
-        z -= 5; // Offset behind camera start
+      {/* Seaweed strands - rooted on floor, RIPPING past */}
+      {seaweeds.map((weed, i) => {
+        // Same travel speed as floor - uses unified throttle
+        let z = ((weed.zOffset + travel) % seaweedLoopLength);
+        // Range: -65 (far, tiny when it pops) to +15 (past camera before loop)
+        // Camera is at Z≈6, so +15 is behind it
+        z = z - 65;
 
-        const rMat = rockMaterial.clone();
-        rMat.uniforms.uDecay.value = decay;
+        // Build curved seaweed strand
+        const segments = 12;
+        const points: THREE.Vector3[] = [];
+        for (let j = 0; j <= segments; j++) {
+          const t = j / segments;
+          const swayPhase = time * 1.5 + weed.phase + t * 2;
+          const sway = Math.sin(swayPhase) * 0.3 * t * t;
+          const secondarySway = Math.sin(swayPhase * 1.7 + 1) * 0.15 * t;
 
-        let geometry;
-        switch (rock.type) {
-          case 0:
-            geometry = <coneGeometry args={[rock.scale * 0.5, rock.scale, 6]} />;
-            break;
-          case 1:
-            geometry = <dodecahedronGeometry args={[rock.scale * 0.4, 0]} />;
-            break;
-          default:
-            geometry = <boxGeometry args={[rock.scale * 0.8, rock.scale * 0.5, rock.scale * 0.6]} />;
+          // Beat sway boost
+          const beatSway = Math.sin(swayPhase * 0.5) * decay * 0.4 * t;
+
+          points.push(new THREE.Vector3(
+            sway + secondarySway + beatSway,
+            t * weed.height,
+            Math.sin(swayPhase * 0.8) * 0.1 * t
+          ));
         }
 
+        const curve = new THREE.CatmullRomCurve3(points);
+        const wMat = seaweedMaterial.clone();
+        wMat.uniforms.uTime.value = time;
+        wMat.uniforms.uDecay.value = decay;
+
         return (
-          <mesh
-            key={`rock-${i}`}
-            position={[rock.x, -7.5 + rock.scale * 0.3, z]}
-            rotation={[0, rock.rotation, 0]}
-          >
-            {geometry}
-            <primitive object={rMat} attach="material" />
+          <mesh key={`weed-${i}`} position={[weed.x, -5, z]}>
+            <tubeGeometry args={[curve, 8, weed.thickness, 6, false]} />
+            <primitive object={wMat} attach="material" />
           </mesh>
         );
       })}
 
-      {/* Ambient glow from below */}
-      <pointLight position={[0, -10, -10]} intensity={0.3} color="#004466" distance={30} />
+      {/* Ambient deep glow from below */}
+      <pointLight position={[0, -8, 0]} intensity={0.4} color="#003344" distance={40} />
     </group>
   );
 };
