@@ -18,10 +18,10 @@ export const simulationFragmentShader = /* glsl */ `
   uniform float uHigh;
   uniform float uEnergy;
   uniform float uBeatIntensity;
-  uniform float uDecay;
-  uniform float uWaveOriginX;
-  uniform float uWaveOriginY;
-  uniform float uWaveTime;
+  // Multiple concurrent waves
+  uniform vec2 uWaveOrigins[6];
+  uniform float uWaveTimes[6];
+  uniform int uWaveCount;
 
   varying vec2 vUv;
 
@@ -143,18 +143,36 @@ export const simulationFragmentShader = /* glsl */ `
       pos = normalize(pos) * 4.0;
     }
 
-    // === OPACITY WAVE ===
-    // Distance from wave origin (random direction per beat)
-    vec2 waveDir = normalize(vec2(uWaveOriginX, uWaveOriginY));
-    float wavePos = dot(pos.xy, waveDir);
-    float waveProgress = uWaveTime * 40.0; // Fast sweep across scene
-    float waveDist = abs(wavePos - waveProgress + 15.0);
-    // Sharp wave front that sweeps across
-    float waveInfluence = smoothstep(4.0, 0.0, waveDist);
+    // === MULTIPLE CONCURRENT WAVES ===
+    // Each wave runs independently, effects are additive
+    float totalWaveInfluence = 0.0;
+
+    for (int i = 0; i < 6; i++) {
+      if (i >= uWaveCount) break;
+
+      vec2 waveDir = normalize(uWaveOrigins[i]);
+      float wavePos = dot(pos.xy, waveDir);
+      float waveProgress = uWaveTimes[i] * 75.0; // Fast sweep
+
+      // Distance from wave front (positive = wave has passed this point)
+      float frontDist = waveProgress - wavePos - 15.0;
+
+      // Wave shape: fade in at front, long tail behind
+      // Leading edge: gentle fade in as wave approaches
+      float leading = smoothstep(-3.0, 1.0, frontDist);
+      // Trailing edge: long gradual fade out
+      float trailing = smoothstep(12.0, 0.0, frontDist);
+
+      float waveInfluence = leading * trailing;
+      totalWaveInfluence += waveInfluence;
+    }
+
+    // Clamp but allow some additive stacking
+    totalWaveInfluence = min(totalWaveInfluence, 1.5);
 
     // Pack rotation and wave into output
     // xyz = position, w encodes both rotation and wave
-    float encodedData = particleRotation + waveInfluence * 100.0;
+    float encodedData = particleRotation + totalWaveInfluence * 100.0;
     gl_FragColor = vec4(pos, encodedData);
   }
 `;
@@ -177,16 +195,17 @@ export const renderVertexShader = /* glsl */ `
 
     // Decode rotation and wave from packed data
     float encodedData = posData.w;
-    vWaveOpacity = floor(encodedData / 100.0) / 1.0;
+    vWaveOpacity = encodedData / 100.0; // Can go above 1.0 for additive
     vRotation = mod(encodedData, 100.0);
 
     vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
     vDepth = -mvPosition.z;
 
-    // Consistent small particles
-    float size = uPointSize;
+    // Size grows slightly with wave
+    float waveSize = 1.0 + vWaveOpacity * 0.4;
+    float size = uPointSize * waveSize;
     gl_PointSize = size * (100.0 / -mvPosition.z);
-    gl_PointSize = clamp(gl_PointSize, 0.5, 6.0);
+    gl_PointSize = clamp(gl_PointSize, 0.5, 10.0);
 
     gl_Position = projectionMatrix * mvPosition;
   }
@@ -207,24 +226,36 @@ export const renderFragmentShader = /* glsl */ `
     float s = sin(vRotation);
     vec2 rotated = vec2(c * centered.x - s * centered.y, s * centered.x + c * centered.y);
 
-    // Sharp, small particle
+    // Soft circular particle with glow
     float dist = length(rotated);
-    if (dist > 0.45) discard;
+    if (dist > 0.5) discard;
 
-    // Colors - dim base, bright during wave
-    vec3 colorBase = vec3(0.3, 0.0, 0.4);   // Dim purple
-    vec3 colorBright = vec3(1.0, 0.4, 1.0); // Bright magenta for wave
+    // Soft edge for glow effect
+    float softEdge = smoothstep(0.5, 0.2, dist);
 
-    // Mix to bright color during wave
-    vec3 color = mix(colorBase, colorBright, vWaveOpacity);
+    // Wave intensity can stack above 1.0
+    float waveIntensity = min(vWaveOpacity, 1.5);
+
+    // Colors - dim base, bright during wave, extra bright when stacked
+    vec3 colorBase = vec3(0.25, 0.0, 0.35);  // Dim purple
+    vec3 colorBright = vec3(1.0, 0.3, 0.9);  // Bright magenta
+    vec3 colorHot = vec3(1.0, 0.7, 1.0);     // Hot white-pink for stacked waves
+
+    // Two-stage color: base->bright->hot
+    vec3 color;
+    if (waveIntensity < 1.0) {
+      color = mix(colorBase, colorBright, waveIntensity);
+    } else {
+      color = mix(colorBright, colorHot, waveIntensity - 1.0);
+    }
 
     // Depth fade - further = more transparent
     float depthFade = smoothstep(20.0, 5.0, vDepth);
 
-    // Base opacity is low, wave makes them pop
-    float baseAlpha = 0.15;
-    float waveAlpha = vWaveOpacity * 0.85;
-    float alpha = depthFade * (baseAlpha + waveAlpha);
+    // Base opacity is low, wave makes them pop, stacking makes them glow
+    float baseAlpha = 0.1;
+    float waveAlpha = waveIntensity * 0.9;
+    float alpha = depthFade * softEdge * (baseAlpha + waveAlpha);
 
     gl_FragColor = vec4(color, alpha);
   }

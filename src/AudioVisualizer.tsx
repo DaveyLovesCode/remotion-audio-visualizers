@@ -49,37 +49,26 @@ const CameraController: React.FC<{
 }> = ({ frame, fps, audioFrame }) => {
   const { camera } = useThree();
   const time = frame / fps;
-  const shakeRef = useRef({ x: 0, y: 0, seed: -1 });
+  const angleRef = useRef(0);
+  const lastTimeRef = useRef(0);
 
   const orbitRadius = 8;
-  const orbitSpeed = 0.08;
+  const baseSpeed = 0.04; // Slower base rotation
+  const boostSpeed = 0.96; // Extra speed during beats
   const verticalOscillation = 0.5;
 
-  const angle = time * orbitSpeed;
+  // Accumulate angle: base speed + decay-boosted speed
+  const deltaTime = time - lastTimeRef.current;
+  const decay = audioFrame.decay ?? 0;
+  angleRef.current += (baseSpeed + decay * boostSpeed) * deltaTime;
+  lastTimeRef.current = time;
+
+  const angle = angleRef.current;
   const x = Math.sin(angle) * orbitRadius;
   const z = Math.cos(angle) * orbitRadius;
   const y = Math.sin(time * 0.15) * verticalOscillation + 1;
 
-  // Deterministic shake based on frame
-  if (shakeRef.current.seed !== frame) {
-    const pseudoRandom = (n: number) => {
-      const x = Math.sin(n * 12.9898 + 78.233) * 43758.5453;
-      return x - Math.floor(x);
-    };
-    shakeRef.current = {
-      x: (pseudoRandom(frame) - 0.5) * audioFrame.beatIntensity * 0.15,
-      y: (pseudoRandom(frame + 1000) - 0.5) * audioFrame.beatIntensity * 0.15,
-      seed: frame,
-    };
-  }
-
-  const zoomPulse = 1 - audioFrame.bass * 0.05;
-
-  camera.position.set(
-    (x + shakeRef.current.x) * zoomPulse,
-    y + shakeRef.current.y,
-    (z + shakeRef.current.x) * zoomPulse
-  );
+  camera.position.set(x, y, z);
   camera.lookAt(0, 0, 0);
   camera.updateProjectionMatrix();
 

@@ -32,8 +32,11 @@ export const GPUParticles: React.FC<GPUParticlesProps> = ({
   const { gl, scene, camera } = useThree();
   const time = frame / fps;
   const pointsRef = useRef<THREE.Points>(null);
-  // Rising-edge trigger: only fires when crossing above threshold, resets when drops below
-  const triggerRef = useRef({ wasAbove: false, originX: 1, originY: 0, startTime: -10 });
+
+  // Multiple concurrent waves - each kick triggers a new one, they run independently
+  const MAX_WAVES = 6;
+  const wavesRef = useRef<Array<{ originX: number; originY: number; startTime: number }>>([]);
+  const wasAboveRef = useRef(false);
 
   // Create all GPU resources once
   const resources = useMemo(() => {
@@ -92,6 +95,7 @@ export const GPUParticles: React.FC<GPUParticlesProps> = ({
     // === SIMULATION SCENE (offscreen) ===
     const simScene = new THREE.Scene();
     const simCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    // Support up to 6 concurrent waves
     const simMaterial = new THREE.ShaderMaterial({
       vertexShader: simulationVertexShader,
       fragmentShader: simulationFragmentShader,
@@ -103,10 +107,10 @@ export const GPUParticles: React.FC<GPUParticlesProps> = ({
         uHigh: { value: 0 },
         uEnergy: { value: 0 },
         uBeatIntensity: { value: 0 },
-        uDecay: { value: 0 },
-        uWaveOriginX: { value: 1 },
-        uWaveOriginY: { value: 0 },
-        uWaveTime: { value: 0 },
+        // Wave arrays - each wave has origin (x,y) and time since trigger
+        uWaveOrigins: { value: new Float32Array(12) }, // 6 waves * 2 (x,y)
+        uWaveTimes: { value: new Float32Array(6) },    // 6 wave times
+        uWaveCount: { value: 0 },
       },
     });
     const simMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), simMaterial);
@@ -156,25 +160,38 @@ export const GPUParticles: React.FC<GPUParticlesProps> = ({
     };
   }, [count]);
 
-  // Rising-edge trigger: fires when bass crosses above 0.5, resets when drops below
+  // Rising-edge trigger: fires when bass crosses above 0.5
   const threshold = 0.5;
   const isAbove = audioFrame.bass > threshold;
 
-  if (isAbove && !triggerRef.current.wasAbove) {
-    // Just crossed above threshold - trigger a new wave
+  if (isAbove && !wasAboveRef.current) {
+    // Just crossed above threshold - add a new wave
     const angle = seededRandom(frame) * Math.PI * 2;
-    triggerRef.current = {
-      wasAbove: true,
+    wavesRef.current.push({
       originX: Math.cos(angle),
       originY: Math.sin(angle),
       startTime: time,
-    };
+    });
+    // Keep only the most recent waves
+    if (wavesRef.current.length > MAX_WAVES) {
+      wavesRef.current.shift();
+    }
+    wasAboveRef.current = true;
   } else if (!isAbove) {
-    // Below threshold - reset so we can trigger again
-    triggerRef.current.wasAbove = false;
+    wasAboveRef.current = false;
   }
 
-  const waveTime = time - triggerRef.current.startTime;
+  // Remove waves that are too old (> 1.5 seconds)
+  wavesRef.current = wavesRef.current.filter(w => time - w.startTime < 1.5);
+
+  // Pack wave data into arrays for shader
+  const waveOrigins = new Float32Array(12);
+  const waveTimes = new Float32Array(6);
+  wavesRef.current.forEach((wave, i) => {
+    waveOrigins[i * 2] = wave.originX;
+    waveOrigins[i * 2 + 1] = wave.originY;
+    waveTimes[i] = time - wave.startTime;
+  });
 
   // Run simulation and update uniforms each frame
   resources.simMaterial.uniforms.uTime.value = time;
@@ -183,10 +200,9 @@ export const GPUParticles: React.FC<GPUParticlesProps> = ({
   resources.simMaterial.uniforms.uHigh.value = audioFrame.high;
   resources.simMaterial.uniforms.uEnergy.value = audioFrame.energy;
   resources.simMaterial.uniforms.uBeatIntensity.value = audioFrame.beatIntensity;
-  resources.simMaterial.uniforms.uDecay.value = 0; // No decay-based expansion
-  resources.simMaterial.uniforms.uWaveOriginX.value = triggerRef.current.originX;
-  resources.simMaterial.uniforms.uWaveOriginY.value = triggerRef.current.originY;
-  resources.simMaterial.uniforms.uWaveTime.value = waveTime;
+  resources.simMaterial.uniforms.uWaveOrigins.value = waveOrigins;
+  resources.simMaterial.uniforms.uWaveTimes.value = waveTimes;
+  resources.simMaterial.uniforms.uWaveCount.value = wavesRef.current.length;
 
   // Render simulation to FBO
   const currentRenderTarget = gl.getRenderTarget();

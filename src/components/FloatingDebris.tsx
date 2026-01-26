@@ -37,29 +37,33 @@ export const FloatingDebris: React.FC<FloatingDebrisProps> = ({
   count = 30,
 }) => {
   const time = frame / fps;
-  // Rising-edge trigger: only fires when crossing above threshold
-  const triggerRef = useRef({ wasAbove: false, originX: 1, originY: 0, startTime: -10 });
 
-  // Rising-edge trigger: fires when bass crosses above 0.5, resets when drops below
+  // Multiple concurrent waves
+  const MAX_WAVES = 6;
+  const wavesRef = useRef<Array<{ originX: number; originY: number; startTime: number }>>([]);
+  const wasAboveRef = useRef(false);
+
+  // Rising-edge trigger: fires when bass crosses above 0.5
   const threshold = 0.5;
   const isAbove = audioFrame.bass > threshold;
 
-  if (isAbove && !triggerRef.current.wasAbove) {
-    // Just crossed above threshold - trigger a new wave
+  if (isAbove && !wasAboveRef.current) {
     const angle = seededRandom(frame + 500) * Math.PI * 2;
-    triggerRef.current = {
-      wasAbove: true,
+    wavesRef.current.push({
       originX: Math.cos(angle),
       originY: Math.sin(angle),
       startTime: time,
-    };
+    });
+    if (wavesRef.current.length > MAX_WAVES) {
+      wavesRef.current.shift();
+    }
+    wasAboveRef.current = true;
   } else if (!isAbove) {
-    // Below threshold - reset so we can trigger again
-    triggerRef.current.wasAbove = false;
+    wasAboveRef.current = false;
   }
 
-  const waveTime = time - triggerRef.current.startTime;
-  const waveProgress = waveTime * 25;
+  // Remove old waves
+  wavesRef.current = wavesRef.current.filter(w => time - w.startTime < 1.5);
 
   // Generate debris items
   const debris = useMemo<DebrisItem[]>(() => {
@@ -179,20 +183,29 @@ export const FloatingDebris: React.FC<FloatingDebrisProps> = ({
         const rotY = item.rotation[1] + time * item.rotationSpeeds[1];
         const rotZ = item.rotation[2] + time * item.rotationSpeeds[2];
 
-        // No scale expansion - constant size
-        const scale = item.scale;
+        // Calculate wave opacity from all active waves (additive)
+        let totalWaveOpacity = 0;
+        for (const wave of wavesRef.current) {
+          const waveTime = time - wave.startTime;
+          const waveProgress = waveTime * 75;
+          const wavePos = x * wave.originX + y * wave.originY;
+          const frontDist = waveProgress - wavePos - 15;
 
-        // Calculate wave opacity for this debris piece
-        const waveDir = { x: triggerRef.current.originX, y: triggerRef.current.originY };
-        const wavePos = x * waveDir.x + y * waveDir.y;
-        const waveDist = Math.abs(wavePos - waveProgress + 10);
-        const waveOpacity = Math.max(0, 1 - waveDist / 3);
+          // Wave shape: fade in at front, long tail
+          const leading = Math.max(0, Math.min(1, (frontDist + 3) / 4));
+          const trailing = Math.max(0, Math.min(1, (12 - frontDist) / 12));
+          totalWaveOpacity += leading * trailing;
+        }
+        totalWaveOpacity = Math.min(totalWaveOpacity, 1.5);
+
+        // Size grows slightly with wave
+        const scale = item.scale * (1 + totalWaveOpacity * 0.3);
 
         // Clone material for each item
         const mat = debrisMaterial.clone();
         mat.uniforms.uTime.value = time;
         mat.uniforms.uEnergy.value = audioFrame.energy;
-        mat.uniforms.uWaveOpacity.value = waveOpacity;
+        mat.uniforms.uWaveOpacity.value = totalWaveOpacity;
 
         let geometry;
         switch (item.type) {
