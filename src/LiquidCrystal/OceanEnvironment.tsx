@@ -136,97 +136,6 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
     return geometry;
   }, [particles]);
 
-  // Speed streaks - motion blur lines RIPPING past
-  const streakCount = 80;
-  const streakLoopLength = 80;
-  const streaks = useMemo(() => {
-    return Array.from({ length: streakCount }, (_, i) => ({
-      x: (seededRandom(i * 17) - 0.5) * 14,
-      y: seededRandom(i * 19) * 5 - 1.5,
-      zOffset: (i / streakCount) * streakLoopLength + seededRandom(i * 23) * 3,
-      length: 1.5 + seededRandom(i * 29) * 3,
-    }));
-  }, []);
-
-  // Streak material - shared across all streaks
-  const streakMaterial = useMemo(() => {
-    return new THREE.ShaderMaterial({
-      uniforms: {
-        uDecay: { value: 0 },
-      },
-      vertexShader: `
-        varying vec2 vUv;
-
-        void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform float uDecay;
-        varying vec2 vUv;
-
-        void main() {
-          float fade = smoothstep(0.0, 0.2, vUv.x) * smoothstep(1.0, 0.8, vUv.x);
-          float edgeFade = 1.0 - abs(vUv.y - 0.5) * 2.0;
-
-          // Streaks blaze brighter during beats
-          vec3 baseColor = vec3(0.3, 0.8, 1.0);
-          vec3 hotColor = vec3(0.6, 1.0, 1.0);
-          vec3 color = mix(baseColor, hotColor, uDecay);
-          float alpha = fade * edgeFade * (0.3 + uDecay * 0.7);
-
-          gl_FragColor = vec4(color, alpha);
-        }
-      `,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-  }, []);
-
-  streakMaterial.uniforms.uDecay.value = decay;
-
-  // Single shared streak geometry (unit length)
-  const streakGeometry = useMemo(() => {
-    return new THREE.PlaneGeometry(0.02, 1);
-  }, []);
-
-  // InstancedMesh for streaks - single draw call instead of 80
-  const streakInstancedMesh = useMemo(() => {
-    const mesh = new THREE.InstancedMesh(streakGeometry, streakMaterial, streakCount);
-    mesh.frustumCulled = false; // Streaks span the scene
-    return mesh;
-  }, [streakGeometry, streakMaterial]);
-
-  // Rotation matrix for aligning streaks along Z axis
-  const streakRotation = useMemo(() => {
-    const euler = new THREE.Euler(Math.PI / 2, 0, 0);
-    return new THREE.Matrix4().makeRotationFromEuler(euler);
-  }, []);
-
-  // Update streak instance matrices each frame
-  const tempMatrix = useMemo(() => new THREE.Matrix4(), []);
-  const tempPosition = useMemo(() => new THREE.Vector3(), []);
-  const tempScale = useMemo(() => new THREE.Vector3(), []);
-
-  streaks.forEach((streak, i) => {
-    const z = ((streak.zOffset + travel) % streakLoopLength) - 65;
-    const scaleY = streak.length * (1 + decay * 4);
-
-    tempPosition.set(streak.x, streak.y, z);
-    tempScale.set(1, scaleY, 1);
-
-    tempMatrix
-      .makeTranslation(tempPosition.x, tempPosition.y, tempPosition.z)
-      .multiply(streakRotation)
-      .scale(tempScale);
-
-    streakInstancedMesh.setMatrixAt(i, tempMatrix);
-  });
-  streakInstancedMesh.instanceMatrix.needsUpdate = true;
-
   // Ocean floor - bumpy terrain with scrolling wireframe
   const floorMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
@@ -483,9 +392,6 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
     <group>
       {/* Rushing particles */}
       <points geometry={particleGeometry} material={particleMaterial} />
-
-      {/* Speed streaks - single instanced draw call */}
-      <primitive object={streakInstancedMesh} />
 
       {/* Ocean floor - memoized geometry */}
       <mesh position={[0, -5, 0]} rotation={[-Math.PI / 2, 0, 0]} geometry={floorGeometry}>

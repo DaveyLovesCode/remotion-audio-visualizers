@@ -3,8 +3,8 @@ import { AudioVisualizer } from "./AudioVisualizer";
 import { LiquidCrystal } from "./LiquidCrystal";
 import { FractureZone } from "./FractureZone";
 
-const DURATION = 1800; // 60 seconds at 30fps
-const FPS = 30;
+const DURATION = 3600; // 60 seconds at 60fps
+const FPS = 60;
 const WIDTH = 1920;
 const HEIGHT = 1080;
 

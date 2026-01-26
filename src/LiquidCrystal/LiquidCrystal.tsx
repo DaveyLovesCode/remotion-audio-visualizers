@@ -99,7 +99,7 @@ const Scene: React.FC<{
       {/* Deep underwater lighting - oriented for horizontal swimming */}
       <ambientLight intensity={0.06} color="#001828" />
       {/* Main glow from jellyfish */}
-      <pointLight position={[0, 0, 0]} intensity={1.5} color="#00ffaa" distance={15} />
+      <pointLight position={[0, 0.3, -0.5]} intensity={1.5} color="#00ffaa" distance={15} />
       {/* Light from ahead (where we're swimming) */}
       <pointLight position={[0, 1, -8]} intensity={0.4} color="#0088ff" />
       {/* Accent from side */}

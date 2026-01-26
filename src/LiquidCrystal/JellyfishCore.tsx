@@ -121,10 +121,12 @@ export const JellyfishCore: React.FC<JellyfishCoreProps> = ({
 
           vec3 newPosition = position + normal * displacement;
 
-          // Flatten bottom for bell shape
-          if (newPosition.y < -0.3) {
-            newPosition.y = -0.3 - (newPosition.y + 0.3) * 0.3;
-          }
+          // Flatten bottom for bell shape - smooth transition to avoid seam
+          float flattenStart = -0.2;
+          float flattenFull = -0.4;
+          float flattenFactor = smoothstep(flattenStart, flattenFull, newPosition.y);
+          float flattenedY = flattenStart - (newPosition.y - flattenStart) * 0.3;
+          newPosition.y = mix(newPosition.y, flattenedY, flattenFactor);
 
           vWorldPosition = (modelMatrix * vec4(newPosition, 1.0)).xyz;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
@@ -203,7 +205,7 @@ export const JellyfishCore: React.FC<JellyfishCoreProps> = ({
 
   return (
     <mesh rotation={[swimPitch + wobbleZ, wobbleY, 0]} scale={baseScale * beatPunch}>
-      <sphereGeometry args={[1, 32, 32]} />
+      <sphereGeometry args={[1, 32, 32, Math.PI]} />
       <primitive object={shaderMaterial} attach="material" />
     </mesh>
   );
