@@ -270,11 +270,6 @@ export const Tendrils: React.FC<TendrilsProps> = ({
 
   const segments = 24;
 
-  const anchorVectors = useMemo(
-    () => Array.from({ length: count }, () => new THREE.Vector3()),
-    [count],
-  );
-
   const runtimes: TendrilRuntime[] = useMemo(() => {
     return tendrils.map((tendril) => {
       const { geometry, centerPositions, tangents, positionAttr, tangentAttr, pointCount } =
@@ -301,52 +296,14 @@ export const Tendrils: React.FC<TendrilsProps> = ({
     });
   }, [tendrils]);
 
-  const attachmentGeometry = useMemo(() => new THREE.SphereGeometry(1, 10, 10), []);
-  const attachmentMaterial = useMemo(() => {
-    return new THREE.ShaderMaterial({
-      uniforms: { uDecay: { value: 0 } },
-      vertexShader: `
-        varying vec3 vNormal;
-        varying vec3 vWorldPos;
-        void main() {
-          vNormal = normalize(normalMatrix * normal);
-          vec4 world = modelMatrix * vec4(position, 1.0);
-          vWorldPos = world.xyz;
-          gl_Position = projectionMatrix * viewMatrix * world;
-        }
-      `,
-      fragmentShader: `
-        uniform float uDecay;
-        varying vec3 vNormal;
-        varying vec3 vWorldPos;
-        void main() {
-          vec3 viewDir = normalize(cameraPosition - vWorldPos);
-          float fresnel = pow(1.0 - abs(dot(viewDir, normalize(vNormal))), 2.3);
-          vec3 coreColor = vec3(0.0, 0.75, 0.55);
-          vec3 glowColor = vec3(0.0, 1.0, 0.85);
-          vec3 color = mix(coreColor, glowColor, fresnel);
-          color += glowColor * uDecay * 0.35;
-          float alpha = 0.45 + fresnel * 0.4 + uDecay * 0.2;
-          gl_FragColor = vec4(color, alpha);
-        }
-      `,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-  }, []);
-
   useEffect(() => {
     return () => {
       runtimes.forEach((rt) => {
         rt.geometry.dispose();
         rt.material.dispose();
       });
-      attachmentGeometry.dispose();
-      attachmentMaterial.dispose();
     };
-  }, [runtimes, attachmentGeometry, attachmentMaterial]);
+  }, [runtimes]);
 
   if (appliedResetTokenRef.current !== resetTokenRef.current) {
     appliedResetTokenRef.current = resetTokenRef.current;
@@ -363,7 +320,6 @@ export const Tendrils: React.FC<TendrilsProps> = ({
     rt.material.uniforms.uDecay.value = decay;
     rt.material.uniforms.uPhase.value = phase;
   });
-  attachmentMaterial.uniforms.uDecay.value = decay;
 
   const anchorObj = anchorRef.current;
   const hasAnchor = !!anchorObj;
@@ -414,7 +370,6 @@ export const Tendrils: React.FC<TendrilsProps> = ({
 
     tmpLocal.set(attachX, 0.05, attachZ);
     tmpWorld.copy(tmpLocal).applyMatrix4(anchorMatrixWorld);
-    anchorVectors[i].copy(tmpWorld);
 
     const a3 = i * 3;
     const prevAx = anchorPrev[a3 + 0];
@@ -606,18 +561,6 @@ export const Tendrils: React.FC<TendrilsProps> = ({
       {runtimes.map((rt, i) => (
         <mesh key={`tendril-${i}`} geometry={rt.geometry} frustumCulled={false}>
           <primitive object={rt.material} attach="material" />
-        </mesh>
-      ))}
-
-      {anchorVectors.map((pos, i) => (
-        <mesh
-          key={`tendril-attach-${i}`}
-          position={pos}
-          scale={0.07 + decay * 0.015}
-          geometry={attachmentGeometry}
-          frustumCulled={false}
-        >
-          <primitive object={attachmentMaterial} attach="material" />
         </mesh>
       ))}
     </>
