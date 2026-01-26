@@ -97,7 +97,6 @@ const Scene: React.FC<{
       <GPUParticles frame={frame} audioFrame={audioFrame} fps={fps} count={64} />
       <FloatingDebris frame={frame} audioFrame={audioFrame} fps={fps} count={40} />
       <CoreGeometry frame={frame} audioFrame={audioFrame} fps={fps} />
-      <BeatFlash frame={frame} audioFrame={audioFrame} fps={fps} />
     </>
   );
 };
@@ -179,7 +178,7 @@ export const AudioVisualizer: React.FC = () => {
   };
 
   return (
-    <div style={{ backgroundColor: "#000" }}>
+    <div style={{ backgroundColor: "#000", position: "relative" }}>
       <ThreeCanvas
         width={width}
         height={height}
@@ -194,6 +193,8 @@ export const AudioVisualizer: React.FC = () => {
       >
         <Scene frame={frame} fps={fps} audioFrame={audioFrame} />
       </ThreeCanvas>
+
+      <BeatFlash audioFrame={audioFrame} frame={frame} fps={fps} />
 
       <Audio src={AUDIO_SRC} />
     </div>
