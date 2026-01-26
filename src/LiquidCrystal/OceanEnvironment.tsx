@@ -188,10 +188,44 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
 
   streakMaterial.uniforms.uDecay.value = decay;
 
-  // Single shared streak geometry (unit length, scaled in shader)
+  // Single shared streak geometry (unit length)
   const streakGeometry = useMemo(() => {
     return new THREE.PlaneGeometry(0.02, 1);
   }, []);
+
+  // InstancedMesh for streaks - single draw call instead of 80
+  const streakInstancedMesh = useMemo(() => {
+    const mesh = new THREE.InstancedMesh(streakGeometry, streakMaterial, streakCount);
+    mesh.frustumCulled = false; // Streaks span the scene
+    return mesh;
+  }, [streakGeometry, streakMaterial]);
+
+  // Rotation matrix for aligning streaks along Z axis
+  const streakRotation = useMemo(() => {
+    const euler = new THREE.Euler(Math.PI / 2, 0, 0);
+    return new THREE.Matrix4().makeRotationFromEuler(euler);
+  }, []);
+
+  // Update streak instance matrices each frame
+  const tempMatrix = useMemo(() => new THREE.Matrix4(), []);
+  const tempPosition = useMemo(() => new THREE.Vector3(), []);
+  const tempScale = useMemo(() => new THREE.Vector3(), []);
+
+  streaks.forEach((streak, i) => {
+    const z = ((streak.zOffset + travel) % streakLoopLength) - 65;
+    const scaleY = streak.length * (1 + decay * 4);
+
+    tempPosition.set(streak.x, streak.y, z);
+    tempScale.set(1, scaleY, 1);
+
+    tempMatrix
+      .makeTranslation(tempPosition.x, tempPosition.y, tempPosition.z)
+      .multiply(streakRotation)
+      .scale(tempScale);
+
+    streakInstancedMesh.setMatrixAt(i, tempMatrix);
+  });
+  streakInstancedMesh.instanceMatrix.needsUpdate = true;
 
   // Ocean floor - bumpy terrain with scrolling wireframe
   const floorMaterial = useMemo(() => {
@@ -342,6 +376,9 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
   floorMaterial.uniforms.uTravel.value = travel;
   floorMaterial.uniforms.uDecay.value = decay;
 
+  // Memoized floor geometry
+  const floorGeometry = useMemo(() => new THREE.PlaneGeometry(60, 80, 32, 32), []);
+
   // Seaweed strands - spread wide across the ocean floor
   const seaweedCount = 50; // Fewer for less density
   const seaweedLoopLength = 100; // Longer loop = more spread out in Z
@@ -442,52 +479,28 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
     prevSeaweedGeomsRef.current = seaweedGeometries;
   }, [seaweedGeometries]);
 
-  // Pre-compute streak z positions (cheaper than recreating geometry)
-  const streakPositions = useMemo(() => {
-    return streaks.map((streak) => {
-      let z = ((streak.zOffset + travel) % streakLoopLength);
-      return z - 65;
-    });
-  }, [streaks, travel]);
-
-  // Compute seaweed z positions
-  const seaweedZPositions = useMemo(() => {
-    return seaweeds.map((weed) => {
-      let z = ((weed.zOffset + travel) % seaweedLoopLength);
-      return z - 80;
-    });
-  }, [seaweeds, travel]);
-
   return (
     <group>
       {/* Rushing particles */}
       <points geometry={particleGeometry} material={particleMaterial} />
 
-      {/* Speed streaks - shared geometry, length scaled via mesh.scale.y */}
-      {streaks.map((streak, i) => (
-        <mesh
-          key={`streak-${i}`}
-          position={[streak.x, streak.y, streakPositions[i]]}
-          rotation={[Math.PI / 2, 0, 0]}
-          scale={[1, streak.length * (1 + decay * 4), 1]}
-          geometry={streakGeometry}
-        >
-          <primitive object={streakMaterial} attach="material" />
-        </mesh>
-      ))}
+      {/* Speed streaks - single instanced draw call */}
+      <primitive object={streakInstancedMesh} />
 
-      {/* Ocean floor - reduced tessellation (32×32 is plenty for noise) */}
-      <mesh position={[0, -5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[60, 80, 32, 32]} />
+      {/* Ocean floor - memoized geometry */}
+      <mesh position={[0, -5, 0]} rotation={[-Math.PI / 2, 0, 0]} geometry={floorGeometry}>
         <primitive object={floorMaterial} attach="material" />
       </mesh>
 
-      {/* Seaweed strands - shared material, pre-computed geometry */}
-      {seaweedGeometries.map((geom, i) => (
-        <mesh key={`weed-${i}`} position={[seaweeds[i].x, -5, seaweedZPositions[i]]} geometry={geom}>
-          <primitive object={seaweedMaterial} attach="material" />
-        </mesh>
-      ))}
+      {/* Seaweed strands - z computed inline (avoids useless memo + array allocation) */}
+      {seaweedGeometries.map((geom, i) => {
+        const z = ((seaweeds[i].zOffset + travel) % seaweedLoopLength) - 80;
+        return (
+          <mesh key={`weed-${i}`} position={[seaweeds[i].x, -5, z]} geometry={geom}>
+            <primitive object={seaweedMaterial} attach="material" />
+          </mesh>
+        );
+      })}
 
       {/* Ambient deep glow from below */}
       <pointLight position={[0, -8, 0]} intensity={0.4} color="#003344" distance={40} />

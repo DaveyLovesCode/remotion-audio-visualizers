@@ -1,5 +1,11 @@
-import { useRef, useMemo } from "react";
+import { useMemo } from "react";
 import type { AudioFrame } from "../audio/types";
+
+// Pre-computed bar data (x positions and base opacities)
+const WAVEFORM_BARS = Array.from({ length: 32 }, (_, i) => ({
+  x: i * 7,
+  baseOpacity: 0.3 + (i / 32) * 0.4,
+}));
 
 interface HolographicUIProps {
   audioFrame: AudioFrame;
@@ -294,19 +300,19 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
             SIGNAL
           </div>
 
-          {/* Waveform bars */}
+          {/* Waveform bars - pre-computed positions */}
           <svg width="220" height="50" style={{ overflow: "visible" }}>
-            {Array.from({ length: 32 }, (_, i) => {
+            {WAVEFORM_BARS.map((bar, i) => {
               const phase = time * 6 + i * 0.3;
               const height = (Math.sin(phase) * 0.5 + 0.5) * (0.3 + decay * 0.7) * 40 + 4;
               return (
                 <rect
                   key={i}
-                  x={i * 7}
+                  x={bar.x}
                   y={25 - height / 2}
                   width="5"
                   height={height}
-                  fill={`rgba(0, 255, 200, ${0.3 + (i / 32) * 0.4 + decay * 0.3})`}
+                  fill={`rgba(0, 255, 200, ${bar.baseOpacity + decay * 0.3})`}
                   style={{
                     filter: decay > 0.3 ? `drop-shadow(0 0 4px rgba(0, 255, 200, 0.6))` : "none",
                   }}

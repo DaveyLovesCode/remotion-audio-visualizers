@@ -130,6 +130,9 @@ export const Tendrils: React.FC<TendrilsProps> = ({
     });
   }, []);
 
+  // Shared attachment sphere geometry
+  const attachmentGeometry = useMemo(() => new THREE.SphereGeometry(1, 8, 8), []);
+
   // Attachment node material
   const attachmentMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
@@ -231,9 +234,12 @@ export const Tendrils: React.FC<TendrilsProps> = ({
     <group position={[0, 0, 0.3]} rotation={[-Math.PI / 2, 0, 0]}>
       {tendrilGeometries.map((geom, i) => (
         <group key={i}>
-          {/* Attachment node */}
-          <mesh position={[geom.attachX, 0.05, geom.attachZ]} scale={0.07 + decay * 0.015}>
-            <sphereGeometry args={[1, 8, 8]} />
+          {/* Attachment node - shared geometry */}
+          <mesh
+            position={[geom.attachX, 0.05, geom.attachZ]}
+            scale={0.07 + decay * 0.015}
+            geometry={attachmentGeometry}
+          >
             <primitive object={attachmentMaterial} attach="material" />
           </mesh>
 
