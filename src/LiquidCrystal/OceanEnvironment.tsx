@@ -136,167 +136,189 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
     return geometry;
   }, [particles]);
 
-  // Ocean floor - bumpy terrain with scrolling wireframe
-  const floorMaterial = useMemo(() => {
-    return new THREE.ShaderMaterial({
-      uniforms: {
-        uTime: { value: 0 },
-        uTravel: { value: 0 },
-        uDecay: { value: 0 },
-      },
-      vertexShader: `
-        uniform float uTravel;
+  // FLOOR TILES - discrete meshes that move and loop, like seaweed
+  const gridCellSize = 2.5;
+  const tileDepth = 50; // Each tile is 50 units deep (20 cells)
+  const tileWidth = 60;
+  const numTiles = 4; // 4 tiles cycling = 200 units of coverage
+  const floorLoopLength = tileDepth * numTiles;
 
-        varying vec2 vUv;
-        varying vec3 vWorldPos;
-        varying float vScrollZ;
+  // Hash function for terrain heights (must match across tiles for seamless edges)
+  const hash2 = (x: number, z: number) => {
+    const val = Math.sin(x * 127.1 + z * 311.7) * 43758.5453;
+    return val - Math.floor(val);
+  };
 
-        // Simplex noise for bumpy terrain
-        vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-        vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-        vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
-        vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+  // Create bumpy geometry for a single tile
+  // Heights use modular Z so tiles loop seamlessly
+  const totalCellsZ = Math.floor(floorLoopLength / gridCellSize); // 80 cells in full loop
 
-        float snoise(vec3 v) {
-          const vec2 C = vec2(1.0/6.0, 1.0/3.0);
-          const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
-          vec3 i = floor(v + dot(v, C.yyy));
-          vec3 x0 = v - i + dot(i, C.xxx);
-          vec3 g = step(x0.yzx, x0.xyz);
-          vec3 l = 1.0 - g;
-          vec3 i1 = min(g.xyz, l.zxy);
-          vec3 i2 = max(g.xyz, l.zxy);
-          vec3 x1 = x0 - i1 + C.xxx;
-          vec3 x2 = x0 - i2 + C.yyy;
-          vec3 x3 = x0 - D.yyy;
-          i = mod289(i);
-          vec4 p = permute(permute(permute(
-            i.z + vec4(0.0, i1.z, i2.z, 1.0))
-            + i.y + vec4(0.0, i1.y, i2.y, 1.0))
-            + i.x + vec4(0.0, i1.x, i2.x, 1.0));
-          float n_ = 0.142857142857;
-          vec3 ns = n_ * D.wyz - D.xzx;
-          vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
-          vec4 x_ = floor(j * ns.z);
-          vec4 y_ = floor(j - 7.0 * x_);
-          vec4 x = x_ *ns.x + ns.yyyy;
-          vec4 y = y_ *ns.x + ns.yyyy;
-          vec4 h = 1.0 - abs(x) - abs(y);
-          vec4 b0 = vec4(x.xy, y.xy);
-          vec4 b1 = vec4(x.zw, y.zw);
-          vec4 s0 = floor(b0)*2.0 + 1.0;
-          vec4 s1 = floor(b1)*2.0 + 1.0;
-          vec4 sh = -step(h, vec4(0.0));
-          vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
-          vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
-          vec3 p0 = vec3(a0.xy, h.x);
-          vec3 p1 = vec3(a0.zw, h.y);
-          vec3 p2 = vec3(a1.xy, h.z);
-          vec3 p3 = vec3(a1.zw, h.w);
-          vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
-          p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
-          vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
-          m = m * m;
-          return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
-        }
+  const createTileGeometry = useMemo(() => {
+    return (tileIndex: number) => {
+      const cellsX = Math.floor(tileWidth / gridCellSize);
+      const cellsZ = Math.floor(tileDepth / gridCellSize);
+      const geometry = new THREE.PlaneGeometry(
+        tileWidth,
+        tileDepth,
+        cellsX,
+        cellsZ
+      );
 
-        void main() {
-          vUv = uv;
+      const positions = geometry.attributes.position;
+      for (let i = 0; i < positions.count; i++) {
+        const x = positions.getX(i);
+        const y = positions.getY(i); // Local Y = world Z after rotation
 
-          // Plane is rotated -90° around X, so position.y maps to world -Z
-          float scrollY = position.y + uTravel;
-          vScrollZ = scrollY;
+        // Global Z in the tiling space
+        const globalZ = y + tileIndex * tileDepth;
+        const gx = x / gridCellSize;
+        const gz = globalZ / gridCellSize;
 
-          // Bumpy terrain - 2 octaves of simplex noise
-          vec3 noiseCoord = vec3(position.x * 0.1, scrollY * 0.1, 0.0);
-          float height = snoise(noiseCoord) * 1.0;
-          height += snoise(noiseCoord * 2.5) * 0.4;
+        const cx0 = Math.floor(gx);
+        const cx1 = cx0 + 1;
+        // MODULAR Z - makes tiles seamlessly loop
+        const cz0 = ((Math.floor(gz) % totalCellsZ) + totalCellsZ) % totalCellsZ;
+        const cz1 = (cz0 + 1) % totalCellsZ;
 
-          // Displace along the plane's local Z (which becomes world Y after rotation)
-          vec3 displaced = position;
-          displaced.z += height;
+        const h00 = hash2(cx0, cz0) * 1.0;
+        const h10 = hash2(cx1, cz0) * 1.0;
+        const h01 = hash2(cx0, cz1) * 1.0;
+        const h11 = hash2(cx1, cz1) * 1.0;
 
-          vWorldPos = (modelMatrix * vec4(displaced, 1.0)).xyz;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform float uTravel;
-        uniform float uDecay;
+        const fx = gx - Math.floor(gx);
+        const fz = gz - Math.floor(gz);
+        const h0 = h00 + (h10 - h00) * fx;
+        const h1 = h01 + (h11 - h01) * fx;
+        const height = h0 + (h1 - h0) * fz;
 
-        varying vec2 vUv;
-        varying vec3 vWorldPos;
-        varying float vScrollZ; // This is the scrolling Y coord (becomes world Z)
+        positions.setZ(i, height);
+      }
 
-        void main() {
-          // Distance fade
-          float distZ = abs(vWorldPos.z);
-          float distX = abs(vWorldPos.x);
-          float distFade = smoothstep(45.0, 8.0, distZ) * smoothstep(35.0, 8.0, distX);
+      geometry.computeVertexNormals();
+      return geometry;
+    };
+  }, [gridCellSize, tileDepth, tileWidth, totalCellsZ]);
 
-          // WIREFRAME GRID - squares that RIP past
-          float gridScale = 1.8;
-          float lineWidth = 0.06;
+  // Pre-create all tile geometries (heights baked in)
+  const tileGeometries = useMemo(() => {
+    return Array.from({ length: numTiles }, (_, i) => createTileGeometry(i));
+  }, [createTileGeometry, numTiles]);
 
-          // Grid uses world X and scrolling Y (which is world Z after rotation)
-          float gridX = vWorldPos.x * gridScale;
-          float gridY = vScrollZ * gridScale;
+  // Per-tile materials with baked grid offset
+  const tileMaterials = useMemo(() => {
+    return Array.from({ length: numTiles }, (_, tileIndex) => {
+      return new THREE.ShaderMaterial({
+        uniforms: {
+          uDecay: { value: 0 },
+          uGridCellSize: { value: gridCellSize },
+          uTileOffsetZ: { value: tileIndex * tileDepth },
+        },
+        vertexShader: `
+          uniform float uTileOffsetZ;
 
-          // Lines in BOTH directions for proper squares
-          float distToLineX = abs(fract(gridX + 0.5) - 0.5);
-          float distToLineY = abs(fract(gridY + 0.5) - 0.5);
+          varying vec3 vWorldPos;
+          varying float vLocalZ; // Local Y becomes Z after rotation
 
-          float lineX = smoothstep(lineWidth, lineWidth * 0.3, distToLineX);
-          float lineY = smoothstep(lineWidth, lineWidth * 0.3, distToLineY);
+          void main() {
+            vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+            // Pass local Y (which is the tile's Z coordinate before rotation)
+            // Plus the tile's offset in the tiling system
+            vLocalZ = position.y + uTileOffsetZ;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform float uDecay;
+          uniform float uGridCellSize;
 
-          // Combine for grid squares
-          float grid = max(lineX, lineY);
+          varying vec3 vWorldPos;
+          varying float vLocalZ;
 
-          // Brighten grid on beats
-          float gridIntensity = 0.3 + uDecay * 0.5;
+          void main() {
+            float distZ = abs(vWorldPos.z);
+            float distX = abs(vWorldPos.x);
+            float distFade = smoothstep(70.0, 15.0, distZ) * smoothstep(28.0, 10.0, distX);
 
-          // Dark terrain base
-          vec3 terrainColor = vec3(0.01, 0.03, 0.05);
+            // Grid from local coordinates - moves with the tile
+            float cellX = vWorldPos.x / uGridCellSize;
+            float cellZ = vLocalZ / uGridCellSize;
 
-          // Wireframe colors
-          vec3 wireColor = vec3(0.0, 0.45, 0.55);
-          vec3 wireGlow = vec3(0.1, 0.7, 0.8);
+            float distToLineX = abs(fract(cellX + 0.5) - 0.5);
+            float distToLineZ = abs(fract(cellZ + 0.5) - 0.5);
 
-          // Compose
-          vec3 color = terrainColor;
-          color += wireColor * grid * gridIntensity;
-          color += wireGlow * grid * uDecay * 0.4;
+            float lineWidth = 0.01;
+            float lineX = smoothstep(lineWidth, lineWidth * 0.25, distToLineX);
+            float lineZ = smoothstep(lineWidth, lineWidth * 0.25, distToLineZ);
+            float grid = max(lineX, lineZ);
 
-          float alpha = distFade * (0.5 + grid * 0.4);
+            float gridIntensity = 0.6 + uDecay * 0.4;
 
-          gl_FragColor = vec4(color, alpha);
-        }
-      `,
-      transparent: true,
-      side: THREE.DoubleSide,
-      depthWrite: false,
+            vec3 terrainColor = vec3(0.01, 0.03, 0.05);
+            vec3 wireColor = vec3(0.0, 0.45, 0.55);
+            vec3 wireGlow = vec3(0.1, 0.7, 0.8);
+
+            vec3 color = terrainColor;
+            color += wireColor * grid * gridIntensity;
+            color += wireGlow * grid * uDecay * 0.4;
+
+            float alpha = distFade * (0.5 + grid * 0.4);
+
+            gl_FragColor = vec4(color, alpha);
+          }
+        `,
+        transparent: true,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
     });
-  }, []);
+  }, [gridCellSize, numTiles, tileDepth]);
 
-  floorMaterial.uniforms.uTime.value = time;
-  floorMaterial.uniforms.uTravel.value = travel;
-  floorMaterial.uniforms.uDecay.value = pulse;
+  // Update uniforms
+  tileMaterials.forEach((mat) => {
+    mat.uniforms.uDecay.value = pulse;
+  });
 
-  // Memoized floor geometry
-  const floorGeometry = useMemo(() => new THREE.PlaneGeometry(60, 80, 32, 32), []);
+  // Seaweed strands - positioned at grid intersections for visual coherence
+  // Grid cells are gridCellSize units wide, so place seaweed at multiples of gridCellSize
+  const seaweedLoopLength = 200; // Must be multiple of gridCellSize (200 = 80 × 2.5)
+  const xSlots = 21; // Grid columns: -25 to +25 in steps of 2.5
+  const zSlots = Math.floor(seaweedLoopLength / gridCellSize); // 80 grid rows in loop
 
-  // Seaweed strands - spread wide across the ocean floor
-  const seaweedCount = 50;
-  const seaweedLoopLength = 180;
   const seaweeds = useMemo(() => {
-    return Array.from({ length: seaweedCount }, (_, i) => ({
-      x: (seededRandom(i * 37) - 0.5) * 40,
-      zOffset: (i / seaweedCount) * seaweedLoopLength + seededRandom(i * 41) * 8,
-      height: 2.0 + seededRandom(i * 43) * 2.5,
-      phase: seededRandom(i * 47) * Math.PI * 2,
-      thickness: 0.08 + seededRandom(i * 53) * 0.1,
-    }));
-  }, []);
+    const strands: {
+      x: number;
+      zOffset: number;
+      height: number;
+      phase: number;
+      thickness: number;
+    }[] = [];
+
+    // Place seaweed at grid intersections with some randomness in which slots get filled
+    for (let xi = 0; xi < xSlots; xi++) {
+      for (let zi = 0; zi < zSlots; zi++) {
+        const seed = xi * 100 + zi;
+        // ~30% chance of seaweed at each intersection
+        if (seededRandom(seed * 17) > 0.3) continue;
+
+        // Exact grid position
+        const x = (xi - Math.floor(xSlots / 2)) * gridCellSize;
+        const zBase = zi * gridCellSize;
+
+        // Slight offset from exact intersection for natural feel
+        const xJitter = (seededRandom(seed * 23) - 0.5) * 0.3;
+        const zJitter = (seededRandom(seed * 29) - 0.5) * 0.3;
+
+        strands.push({
+          x: x + xJitter,
+          zOffset: zBase + zJitter,
+          height: 1.8 + seededRandom(seed * 43) * 2.2,
+          phase: seededRandom(seed * 47) * Math.PI * 2,
+          thickness: 0.06 + seededRandom(seed * 53) * 0.08,
+        });
+      }
+    }
+    return strands;
+  }, [gridCellSize]);
 
   // Per-seaweed materials
   const seaweedMaterials = useMemo(() => {
@@ -385,14 +407,27 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
       {/* Rushing particles */}
       <points geometry={particleGeometry} material={particleMaterial} />
 
-      {/* Ocean floor - memoized geometry */}
-      <mesh position={[0, -5, 0]} rotation={[-Math.PI / 2, 0, 0]} geometry={floorGeometry}>
-        <primitive object={floorMaterial} attach="material" />
-      </mesh>
+      {/* Ocean floor - tiles that move and loop */}
+      {tileGeometries.map((geom, i) => {
+        // Each tile moves toward camera, loops back when past
+        const tileBaseZ = i * tileDepth;
+        const z = ((tileBaseZ + travel) % floorLoopLength) - floorLoopLength / 2 - tileDepth / 2;
+        return (
+          <mesh
+            key={`floor-tile-${i}`}
+            position={[0, -5, z]}
+            rotation={[-Math.PI / 2, 0, 0]}
+            geometry={geom}
+          >
+            <primitive object={tileMaterials[i]} attach="material" />
+          </mesh>
+        );
+      })}
 
-      {/* Seaweed strands - GPU-animated sway */}
+      {/* Seaweed strands - GPU-animated sway, aligned to grid intersections */}
       {seaweedGeometries.map((geom, i) => {
-        const z = ((seaweeds[i].zOffset + travel) % seaweedLoopLength) - 80;
+        // Offset -100 (= 40 × 2.5) ensures grid alignment
+        const z = ((seaweeds[i].zOffset + travel) % seaweedLoopLength) - 100;
         return (
           <mesh key={`weed-${i}`} position={[seaweeds[i].x, -5, z]} geometry={geom}>
             <primitive object={seaweedMaterials[i]} attach="material" />
