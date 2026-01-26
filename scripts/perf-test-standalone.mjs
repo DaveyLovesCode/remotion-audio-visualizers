@@ -56,7 +56,7 @@ async function runPerfTest() {
 
     console.error("Server ready. Launching browser...");
 
-    // Launch browser with GPU acceleration
+    // Launch browser with GPU acceleration and vsync disabled
     const browser = await chromium.launch({
       headless: true,
       args: [
@@ -66,6 +66,8 @@ async function runPerfTest() {
         "--use-gl=angle",
         "--use-angle=metal",
         "--ignore-gpu-blocklist",
+        "--disable-frame-rate-limit",
+        "--disable-gpu-vsync",
       ],
     });
 

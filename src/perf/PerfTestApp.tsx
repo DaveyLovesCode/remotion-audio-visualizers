@@ -10,7 +10,7 @@ import { HolographicUI } from "../LiquidCrystal/HolographicUI";
 
 const WIDTH = 1920;
 const HEIGHT = 1080;
-const FPS = 60;
+const FPS = 120;
 
 // FPS tracking exposed to window for measurement
 interface PerfData {
@@ -180,48 +180,64 @@ export const PerfTestApp: React.FC = () => {
   const decayRef = useRef(0);
   const decayPhaseRef = useRef(0);
 
-  // Animation loop
+  // Animation loop - measures actual frame render times for accurate FPS calculation
   useEffect(() => {
-    let animationId: number;
+    let running = true;
+    let lastFrameTime = performance.now();
+    const frameTimes: number[] = [];
 
-    const animate = (timestamp: number) => {
-      if (startTimeRef.current === null) {
-        startTimeRef.current = timestamp;
+    const animate = () => {
+      if (!running) return;
+
+      const now = performance.now();
+      const frameTime = now - lastFrameTime;
+      lastFrameTime = now;
+
+      // Track frame times for FPS calculation
+      if (frameTime > 0 && frameTime < 500) { // Ignore outliers
+        frameTimes.push(frameTime);
+        // Keep last 100 frame times
+        if (frameTimes.length > 100) {
+          frameTimes.shift();
+        }
       }
 
-      // Calculate frame from elapsed time
-      const elapsed = (timestamp - startTimeRef.current) / 1000;
-      const newFrame = Math.floor(elapsed * FPS);
+      if (startTimeRef.current === null) {
+        startTimeRef.current = now;
+      }
 
-      if (newFrame !== frameRef.current) {
-        frameRef.current = newFrame;
-        setFrame(newFrame);
+      // Update frame for rendering
+      frameRef.current++;
+      setFrame(frameRef.current);
 
-        // FPS tracking
-        if (window.__fpsData && window.__fpsData.measuring) {
-          window.__fpsData.frameCount++;
-          const now = performance.now();
-          const sampleElapsed = now - window.__fpsData.lastSampleTime;
+      // FPS tracking - compute from frame times every second
+      if (window.__fpsData && window.__fpsData.measuring) {
+        window.__fpsData.frameCount++;
+        const sampleElapsed = now - window.__fpsData.lastSampleTime;
 
-          if (sampleElapsed >= 1000) {
-            const fps = (window.__fpsData.frameCount * 1000) / sampleElapsed;
-            window.__fpsData.samples.push(Math.round(fps * 100) / 100);
-            window.__fpsData.frameCount = 0;
-            window.__fpsData.lastSampleTime = now;
+        if (sampleElapsed >= 1000 && frameTimes.length >= 10) {
+          // Calculate FPS from average frame time
+          const avgFrameTime = frameTimes.reduce((a, b) => a + b, 0) / frameTimes.length;
+          const fps = 1000 / avgFrameTime;
 
-            // Keep last 30 samples
-            if (window.__fpsData.samples.length > 30) {
-              window.__fpsData.samples.shift();
-            }
+          window.__fpsData.samples.push(Math.round(fps * 100) / 100);
+          window.__fpsData.frameCount = 0;
+          window.__fpsData.lastSampleTime = now;
+          frameTimes.length = 0; // Clear for next sample
+
+          // Keep last 30 samples
+          if (window.__fpsData.samples.length > 30) {
+            window.__fpsData.samples.shift();
           }
         }
       }
 
-      animationId = requestAnimationFrame(animate);
+      // Use requestAnimationFrame for timing - actual FPS calculated from frame times
+      requestAnimationFrame(animate);
     };
 
-    animationId = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(animationId);
+    requestAnimationFrame(animate);
+    return () => { running = false; };
   }, []);
 
   // Generate audio data with decay

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect } from "react";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { AudioFrame } from "../audio/types";
 
@@ -204,16 +204,13 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
           vUv = uv;
 
           // Plane is rotated -90° around X, so position.y maps to world -Z
-          // This is the scroll direction for the RIPPING motion
           float scrollY = position.y + uTravel;
           vScrollZ = scrollY;
 
-          // Bumpy terrain using scrolling noise coordinates
-          // position.x = world X, scrollY = world Z (after rotation)
+          // Bumpy terrain - 2 octaves of simplex noise
           vec3 noiseCoord = vec3(position.x * 0.1, scrollY * 0.1, 0.0);
           float height = snoise(noiseCoord) * 1.0;
           height += snoise(noiseCoord * 2.5) * 0.4;
-          height += snoise(noiseCoord * 5.0) * 0.15;
 
           // Displace along the plane's local Z (which becomes world Y after rotation)
           vec3 displaced = position;
@@ -289,13 +286,11 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
   const floorGeometry = useMemo(() => new THREE.PlaneGeometry(60, 80, 32, 32), []);
 
   // Seaweed strands - spread wide across the ocean floor
-  const seaweedCount = 50; // Fewer for less density
-  const seaweedLoopLength = 180; // Longer loop = more spread out in Z
+  const seaweedCount = 50;
+  const seaweedLoopLength = 180;
   const seaweeds = useMemo(() => {
     return Array.from({ length: seaweedCount }, (_, i) => ({
-      // Wide X spread - way off to left and right
       x: (seededRandom(i * 37) - 0.5) * 40,
-      // Spread evenly across long loop
       zOffset: (i / seaweedCount) * seaweedLoopLength + seededRandom(i * 41) * 8,
       height: 2.0 + seededRandom(i * 43) * 2.5,
       phase: seededRandom(i * 47) * Math.PI * 2,
@@ -303,90 +298,87 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
     }));
   }, []);
 
-  const seaweedMaterial = useMemo(() => {
-    return new THREE.ShaderMaterial({
-      uniforms: {
-        uTime: { value: 0 },
-        uDecay: { value: 0 },
-      },
-      vertexShader: `
-        varying float vProgress;
-        varying vec3 vNormal;
+  // Per-seaweed materials
+  const seaweedMaterials = useMemo(() => {
+    return seaweeds.map((weed) => {
+      return new THREE.ShaderMaterial({
+        uniforms: {
+          uTime: { value: 0 },
+          uDecay: { value: 0 },
+          uPhase: { value: weed.phase },
+        },
+        vertexShader: `
+          uniform float uTime;
+          uniform float uPhase;
 
-        void main() {
-          vProgress = uv.y;
-          vNormal = normalMatrix * normal;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform float uTime;
-        uniform float uDecay;
+          varying float vProgress;
+          varying vec3 vNormal;
 
-        varying float vProgress;
-        varying vec3 vNormal;
+          void main() {
+            float t = uv.y;
+            vProgress = t;
+            vNormal = normalMatrix * normal;
 
-        void main() {
-          // Gradient from base to tip
-          vec3 baseColor = vec3(0.02, 0.15, 0.1);
-          vec3 tipColor = vec3(0.05, 0.35, 0.25);
-          vec3 glowColor = vec3(0.1, 0.6, 0.4);
+            float swayPhase = uTime * 1.5 + uPhase + t * 2.0;
+            float sway = sin(swayPhase) * 0.3 * t * t;
+            float secondarySway = sin(swayPhase * 1.7 + 1.0) * 0.15 * t;
+            float zSway = sin(swayPhase * 0.8) * 0.1 * t;
 
-          vec3 color = mix(baseColor, tipColor, vProgress);
+            vec3 animatedPos = position;
+            animatedPos.x += sway + secondarySway;
+            animatedPos.z += zSway;
 
-          // Glow on beats
-          color = mix(color, glowColor, uDecay * 0.4 * vProgress);
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(animatedPos, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform float uDecay;
 
-          // Simple rim lighting
-          vec3 viewDir = vec3(0.0, 0.0, 1.0);
-          float rim = 1.0 - abs(dot(vNormal, viewDir));
-          color += vec3(0.0, 0.2, 0.15) * rim * 0.3;
+          varying float vProgress;
+          varying vec3 vNormal;
 
-          float alpha = 0.7 - vProgress * 0.3;
+          void main() {
+            vec3 baseColor = vec3(0.02, 0.15, 0.1);
+            vec3 tipColor = vec3(0.05, 0.35, 0.25);
+            vec3 glowColor = vec3(0.1, 0.6, 0.4);
 
-          gl_FragColor = vec4(color, alpha);
-        }
-      `,
-      transparent: true,
-      side: THREE.DoubleSide,
-      depthWrite: false,
+            vec3 color = mix(baseColor, tipColor, vProgress);
+            color = mix(color, glowColor, uDecay * 0.4 * vProgress);
+
+            vec3 viewDir = vec3(0.0, 0.0, 1.0);
+            float rim = 1.0 - abs(dot(vNormal, viewDir));
+            color += vec3(0.0, 0.2, 0.15) * rim * 0.3;
+
+            float alpha = 0.7 - vProgress * 0.3;
+            gl_FragColor = vec4(color, alpha);
+          }
+        `,
+        transparent: true,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
     });
-  }, []);
+  }, [seaweeds]);
 
-  seaweedMaterial.uniforms.uTime.value = time;
-  seaweedMaterial.uniforms.uDecay.value = decay;
+  // Update seaweed uniforms
+  seaweedMaterials.forEach((mat) => {
+    mat.uniforms.uTime.value = time;
+    mat.uniforms.uDecay.value = decay;
+  });
 
-  // Quantized time for seaweed geometry updates (~20 rebuilds/sec is plenty smooth)
-  const quantizedTime = Math.floor(time * 20) / 20;
-
-  // Pre-compute seaweed geometries with memoization
+  // Static seaweed geometries
   const seaweedGeometries = useMemo(() => {
     return seaweeds.map((weed) => {
       const segments = 12;
       const points: THREE.Vector3[] = [];
       for (let j = 0; j <= segments; j++) {
         const t = j / segments;
-        const swayPhase = quantizedTime * 1.5 + weed.phase + t * 2;
-        const sway = Math.sin(swayPhase) * 0.3 * t * t;
-        const secondarySway = Math.sin(swayPhase * 1.7 + 1) * 0.15 * t;
-        // Note: decay-based sway is handled via shader now for smoothness
-        points.push(new THREE.Vector3(
-          sway + secondarySway,
-          t * weed.height,
-          Math.sin(swayPhase * 0.8) * 0.1 * t
-        ));
+        points.push(new THREE.Vector3(0, t * weed.height, 0));
       }
       const curve = new THREE.CatmullRomCurve3(points);
       return new THREE.TubeGeometry(curve, 8, weed.thickness, 6, false);
     });
-  }, [seaweeds, quantizedTime]);
-
-  // Dispose old seaweed geometries when they change
-  const prevSeaweedGeomsRef = useRef<THREE.TubeGeometry[]>([]);
-  useEffect(() => {
-    prevSeaweedGeomsRef.current.forEach(geom => geom.dispose());
-    prevSeaweedGeomsRef.current = seaweedGeometries;
-  }, [seaweedGeometries]);
+  }, [seaweeds]);
 
   return (
     <group>
@@ -398,12 +390,12 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
         <primitive object={floorMaterial} attach="material" />
       </mesh>
 
-      {/* Seaweed strands - z computed inline (avoids useless memo + array allocation) */}
+      {/* Seaweed strands - GPU-animated sway */}
       {seaweedGeometries.map((geom, i) => {
         const z = ((seaweeds[i].zOffset + travel) % seaweedLoopLength) - 80;
         return (
           <mesh key={`weed-${i}`} position={[seaweeds[i].x, -5, z]} geometry={geom}>
-            <primitive object={seaweedMaterial} attach="material" />
+            <primitive object={seaweedMaterials[i]} attach="material" />
           </mesh>
         );
       })}

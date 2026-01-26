@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect } from "react";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { AudioFrame } from "../audio/types";
 
@@ -15,7 +15,7 @@ function seededRandom(seed: number): number {
 }
 
 /**
- * Flowing tendrils - SMOOTH motion with speed pump on beats
+ * Flowing tendrils - GPU-animated sway (no geometry rebuilds)
  * Uses accumulated phase so motion flows continuously, beats just accelerate it
  */
 export const Tendrils: React.FC<TendrilsProps> = ({
@@ -26,10 +26,8 @@ export const Tendrils: React.FC<TendrilsProps> = ({
 }) => {
   const time = frame / fps;
   const decay = audioFrame.decay ?? 0;
-  const mid = audioFrame.mid;
 
   // Accumulated phase - constant flow, speeds up on beats
-  // Handles Remotion loop/seek by detecting time going backwards
   const phaseRef = useRef(0);
   const lastTimeRef = useRef(0);
 
@@ -48,7 +46,7 @@ export const Tendrils: React.FC<TendrilsProps> = ({
   lastTimeRef.current = time;
   const phase = phaseRef.current;
 
-  // Generate tendril configurations - LONGER tendrils
+  // Generate tendril configurations
   const tendrils = useMemo(() => {
     return Array.from({ length: count }, (_, i) => {
       const angle = (i / count) * Math.PI * 2;
@@ -56,79 +54,115 @@ export const Tendrils: React.FC<TendrilsProps> = ({
       return {
         baseAngle: angle,
         radiusOffset,
-        length: 2.5 + seededRandom(i * 11) * 1.5, // LONGER
+        length: 2.5 + seededRandom(i * 11) * 1.5,
         phaseOffset: seededRandom(i * 13) * Math.PI * 2,
         thickness: 0.035 + seededRandom(i * 17) * 0.03,
-        segments: 32, // More segments for smoothness
+        index: i,
       };
     });
   }, [count]);
 
-  // Shader for glowing tendrils
-  const tendrilMaterial = useMemo(() => {
-    return new THREE.ShaderMaterial({
-      uniforms: {
-        uTime: { value: 0 },
-        uDecay: { value: 0 },
-        uPhase: { value: 0 },
-      },
-      vertexShader: `
-        varying float vProgress;
-        varying vec3 vPosition;
+  // Create static tube geometries ONCE - straight tubes animated in shader
+  const tendrilGeometries = useMemo(() => {
+    return tendrils.map((tendril) => {
+      const attachX = Math.cos(tendril.baseAngle) * tendril.radiusOffset;
+      const attachZ = Math.sin(tendril.baseAngle) * tendril.radiusOffset;
 
-        void main() {
-          vProgress = uv.y;
-          vPosition = position;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform float uTime;
-        uniform float uDecay;
-        uniform float uPhase;
+      // Create straight tube pointing down from attachment point
+      const points = [];
+      const segments = 32;
+      for (let j = 0; j <= segments; j++) {
+        const t = j / segments;
+        points.push(new THREE.Vector3(attachX, -t * tendril.length, attachZ));
+      }
+      const curve = new THREE.CatmullRomCurve3(points);
+      const tubeGeom = new THREE.TubeGeometry(curve, 24, tendril.thickness * 1.5, 8, false);
 
-        varying float vProgress;
-        varying vec3 vPosition;
-
-        void main() {
-          // Color gradient along tendril
-          vec3 attachColor = vec3(0.0, 0.8, 0.6);
-          vec3 baseColor = vec3(0.0, 0.5, 0.7);
-          vec3 tipColor = vec3(0.6, 0.2, 0.9);
-          vec3 glowColor = vec3(0.0, 1.0, 0.8);
-
-          // Smooth gradient
-          vec3 color;
-          if (vProgress < 0.1) {
-            color = mix(attachColor, baseColor, vProgress / 0.1);
-          } else {
-            color = mix(baseColor, tipColor, (vProgress - 0.1) / 0.9);
-          }
-
-          // Glow pulses traveling down - uses accumulated phase
-          float pulse = sin(vProgress * 8.0 - uPhase * 2.0);
-          pulse = smoothstep(0.2, 0.8, pulse);
-          color = mix(color, glowColor, pulse * 0.4 * (0.5 + uDecay));
-
-          // Alpha: strong at base, fades toward tip
-          float baseAlpha = smoothstep(0.0, 0.15, 0.15 - vProgress) * 0.5;
-          float bodyAlpha = (1.0 - vProgress * 0.6) * (0.5 + uDecay * 0.3);
-          float alpha = baseAlpha + bodyAlpha;
-
-          // Subtle bioluminescent spots
-          float spots = sin(vProgress * 25.0 + uPhase) * sin(vPosition.x * 15.0 + uPhase * 0.5);
-          spots = smoothstep(0.85, 1.0, spots);
-          color += vec3(0.4, 1.0, 0.8) * spots * 0.3;
-
-          gl_FragColor = vec4(color, alpha);
-        }
-      `,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide,
-      depthWrite: false,
+      return { attachX, attachZ, tubeGeom, tendril };
     });
-  }, []);
+  }, [tendrils]);
+
+  // Per-tendril materials for individual phaseOffset/index
+  const tendrilMaterials = useMemo(() => {
+    return tendrils.map((tendril) => {
+      return new THREE.ShaderMaterial({
+        uniforms: {
+          uDecay: { value: 0 },
+          uPhase: { value: 0 },
+          uPhaseOffset: { value: tendril.phaseOffset },
+          uTendrilIndex: { value: tendril.index },
+        },
+        vertexShader: `
+          uniform float uPhase;
+          uniform float uPhaseOffset;
+          uniform float uTendrilIndex;
+
+          varying float vProgress;
+          varying vec3 vAnimatedPos;
+
+          void main() {
+            float t = uv.y;
+            vProgress = t;
+
+            float swayAmount = pow(t, 1.3) * 0.8;
+            float swayPhase = uPhase + uPhaseOffset;
+
+            float swayX = sin(swayPhase * 0.8 + t * 2.5) * swayAmount;
+            float swayZ = cos(swayPhase * 0.6 + t * 2.0) * swayAmount * 0.6;
+
+            float secondaryX = sin(swayPhase * 0.3 + t * 1.2 + uTendrilIndex) * swayAmount * 0.25;
+            float secondaryZ = cos(swayPhase * 0.25 + t * 1.0 + uTendrilIndex * 0.5) * swayAmount * 0.2;
+
+            vec3 animatedPos = position;
+            animatedPos.x += swayX + secondaryX;
+            animatedPos.z += swayZ + secondaryZ;
+
+            vAnimatedPos = animatedPos;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(animatedPos, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform float uDecay;
+          uniform float uPhase;
+
+          varying float vProgress;
+          varying vec3 vAnimatedPos;
+
+          void main() {
+            vec3 attachColor = vec3(0.0, 0.8, 0.6);
+            vec3 baseColor = vec3(0.0, 0.5, 0.7);
+            vec3 tipColor = vec3(0.6, 0.2, 0.9);
+            vec3 glowColor = vec3(0.0, 1.0, 0.8);
+
+            vec3 color;
+            if (vProgress < 0.1) {
+              color = mix(attachColor, baseColor, vProgress / 0.1);
+            } else {
+              color = mix(baseColor, tipColor, (vProgress - 0.1) / 0.9);
+            }
+
+            float pulse = sin(vProgress * 8.0 - uPhase * 2.0);
+            pulse = smoothstep(0.2, 0.8, pulse);
+            color = mix(color, glowColor, pulse * 0.4 * (0.5 + uDecay));
+
+            float baseAlpha = smoothstep(0.0, 0.15, 0.15 - vProgress) * 0.5;
+            float bodyAlpha = (1.0 - vProgress * 0.6) * (0.5 + uDecay * 0.3);
+            float alpha = baseAlpha + bodyAlpha;
+
+            float spots = sin(vProgress * 25.0 + uPhase) * sin(vAnimatedPos.x * 15.0 + uPhase * 0.5);
+            spots = smoothstep(0.85, 1.0, spots);
+            color += vec3(0.4, 1.0, 0.8) * spots * 0.3;
+
+            gl_FragColor = vec4(color, alpha);
+          }
+        `,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+    });
+  }, [tendrils]);
 
   // Shared attachment sphere geometry
   const attachmentGeometry = useMemo(() => new THREE.SphereGeometry(1, 8, 8), []);
@@ -175,66 +209,18 @@ export const Tendrils: React.FC<TendrilsProps> = ({
     });
   }, []);
 
-  tendrilMaterial.uniforms.uTime.value = time;
-  tendrilMaterial.uniforms.uDecay.value = decay;
-  tendrilMaterial.uniforms.uPhase.value = phase;
+  // Update uniforms
+  tendrilMaterials.forEach((mat) => {
+    mat.uniforms.uDecay.value = decay;
+    mat.uniforms.uPhase.value = phase;
+  });
   attachmentMaterial.uniforms.uDecay.value = decay;
 
-  // Pre-compute curves and geometries only when phase changes significantly
-  // Using a quantized phase to reduce geometry rebuilds while keeping smooth animation
-  const quantizedPhase = Math.floor(phase * 30) / 30; // ~30 updates per second of phase
-
-  const tendrilGeometries = useMemo(() => {
-    return tendrils.map((tendril, i) => {
-      const attachX = Math.cos(tendril.baseAngle) * tendril.radiusOffset;
-      const attachZ = Math.sin(tendril.baseAngle) * tendril.radiusOffset;
-
-      const points: THREE.Vector3[] = [];
-
-      for (let j = 0; j <= tendril.segments; j++) {
-        const t = j / tendril.segments;
-        const y = -t * tendril.length;
-
-        const swayAmount = Math.pow(t, 1.3) * 0.8;
-        const swayPhase = quantizedPhase + tendril.phaseOffset;
-        const swayX = Math.sin(swayPhase * 0.8 + t * 2.5) * swayAmount;
-        const swayZ = Math.cos(swayPhase * 0.6 + t * 2.0) * swayAmount * 0.6;
-
-        const secondaryX = Math.sin(swayPhase * 0.3 + t * 1.2 + i) * swayAmount * 0.25;
-        const secondaryZ = Math.cos(swayPhase * 0.25 + t * 1.0 + i * 0.5) * swayAmount * 0.2;
-
-        points.push(new THREE.Vector3(
-          attachX + swayX + secondaryX,
-          y,
-          attachZ + swayZ + secondaryZ
-        ));
-      }
-
-      const curve = new THREE.CatmullRomCurve3(points);
-      return {
-        attachX,
-        attachZ,
-        tubeGeom: new THREE.TubeGeometry(curve, 24, tendril.thickness * 1.5, 8, false),
-      };
-    });
-  }, [tendrils, quantizedPhase]);
-
-  // Dispose old geometries when they change
-  const prevGeometriesRef = useRef<THREE.TubeGeometry[]>([]);
-  useEffect(() => {
-    // Dispose previous geometries
-    prevGeometriesRef.current.forEach(geom => geom.dispose());
-    // Store current for next cleanup
-    prevGeometriesRef.current = tendrilGeometries.map(g => g.tubeGeom);
-  }, [tendrilGeometries]);
-
-  // Tendrils trail BEHIND the jellyfish (in +Z direction)
-  // Jellyfish swims in -Z, so tendrils extend toward +Z
   return (
     <group position={[0, 0, 0.3]} rotation={[-Math.PI / 2, 0, 0]}>
       {tendrilGeometries.map((geom, i) => (
         <group key={i}>
-          {/* Attachment node - shared geometry */}
+          {/* Attachment node */}
           <mesh
             position={[geom.attachX, 0.05, geom.attachZ]}
             scale={0.07 + decay * 0.015}
@@ -243,9 +229,9 @@ export const Tendrils: React.FC<TendrilsProps> = ({
             <primitive object={attachmentMaterial} attach="material" />
           </mesh>
 
-          {/* Tendril tube - shared material, geometry from memo */}
+          {/* Tendril tube - GPU-animated */}
           <mesh geometry={geom.tubeGeom}>
-            <primitive object={tendrilMaterial} attach="material" />
+            <primitive object={tendrilMaterials[i]} attach="material" />
           </mesh>
         </group>
       ))}
