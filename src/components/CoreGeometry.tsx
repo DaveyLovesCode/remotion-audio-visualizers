@@ -29,6 +29,8 @@ export const CoreGeometry: React.FC<CoreGeometryProps> = ({
         uMid: { value: 0 },
         uEnergy: { value: 0 },
         uBeatIntensity: { value: 0 },
+        uDecay: { value: 0 },
+        uDecayPhase: { value: 0 },
         uBaseColor: { value: new THREE.Color("#1a0a2e") },
         uGlowColor: { value: new THREE.Color("#ff00ff") },
         uHighlightColor: { value: new THREE.Color("#00ffff") },
@@ -39,6 +41,8 @@ export const CoreGeometry: React.FC<CoreGeometryProps> = ({
         uniform float uMid;
         uniform float uEnergy;
         uniform float uBeatIntensity;
+        uniform float uDecay;
+        uniform float uDecayPhase;
 
         varying vec3 vNormal;
         varying vec3 vPosition;
@@ -114,25 +118,38 @@ export const CoreGeometry: React.FC<CoreGeometryProps> = ({
           vNormal = normal;
           vPosition = position;
 
-          // Multi-octave noise for organic displacement
+          // Calculate angular position for peak evolution
+          float angle = atan(position.y, position.x);
+          float polarAngle = atan(length(position.xy), position.z);
+
+          // Multi-octave noise with decayPhase offset for peak evolution
+          // As decay accumulates, peaks rotate around the surface
           float noiseScale = 1.5;
-          float noise1 = snoise(position * noiseScale + uTime * 0.3);
-          float noise2 = snoise(position * noiseScale * 2.0 + uTime * 0.5) * 0.5;
-          float noise3 = snoise(position * noiseScale * 4.0 + uTime * 0.7) * 0.25;
+          vec3 evolvedPos = position;
+          evolvedPos.x = position.x * cos(uDecayPhase * 0.5) - position.y * sin(uDecayPhase * 0.5);
+          evolvedPos.y = position.x * sin(uDecayPhase * 0.5) + position.y * cos(uDecayPhase * 0.5);
+
+          float noise1 = snoise(evolvedPos * noiseScale + uTime * 0.3);
+          float noise2 = snoise(evolvedPos * noiseScale * 2.0 + uTime * 0.5) * 0.5;
+          float noise3 = snoise(evolvedPos * noiseScale * 4.0 + uTime * 0.7) * 0.25;
           float combinedNoise = noise1 + noise2 + noise3;
 
-          // Bass-driven displacement (kick drum punch)
-          float bassDisplacement = uBass * 0.8 * (1.0 + combinedNoise * 0.5);
+          // Sharpen peaks: raise noise to power to create more defined peaks vs valleys
+          float sharpNoise = sign(combinedNoise) * pow(abs(combinedNoise), 0.7);
+
+          // Decay-driven peak displacement - peaks get taller with decay
+          // Use sharpened noise so peaks are more pronounced
+          float peakDisplacement = uDecay * 0.6 * (0.3 + sharpNoise * 0.7);
+
+          // Small base scale effect (reduced from before)
+          float baseDisplacement = uDecay * 0.1;
 
           // Mid-frequency shimmer
-          float midDisplacement = uMid * 0.2 * noise2;
+          float midDisplacement = uMid * 0.15 * noise2;
 
-          // Beat punch effect
-          float beatPunch = uBeatIntensity * 0.3;
-
-          // Total displacement
-          float displacement = bassDisplacement + midDisplacement + beatPunch;
-          displacement *= 1.0 + uEnergy * 0.5;
+          // Total displacement - mostly peaks, small uniform expansion
+          float displacement = baseDisplacement + peakDisplacement + midDisplacement;
+          displacement *= 1.0 + uEnergy * 0.3;
 
           vDisplacement = displacement;
 
@@ -147,6 +164,7 @@ export const CoreGeometry: React.FC<CoreGeometryProps> = ({
         uniform float uBass;
         uniform float uEnergy;
         uniform float uBeatIntensity;
+        uniform float uDecay;
         uniform vec3 uBaseColor;
         uniform vec3 uGlowColor;
         uniform vec3 uHighlightColor;
@@ -160,21 +178,21 @@ export const CoreGeometry: React.FC<CoreGeometryProps> = ({
           vec3 viewDirection = normalize(cameraPosition - vPosition);
           float fresnel = pow(1.0 - abs(dot(viewDirection, vNormal)), 3.0);
 
-          // Color mixing based on audio
+          // Color mixing based on decay (smooth cushioned value)
           vec3 baseColor = uBaseColor;
-          vec3 glowColor = mix(uGlowColor, uHighlightColor, uBass);
+          vec3 glowColor = mix(uGlowColor, uHighlightColor, uDecay);
 
           // Displacement coloring
           float displaceColor = smoothstep(0.0, 0.5, vDisplacement);
 
           // Final color
           vec3 color = mix(baseColor, glowColor, fresnel + displaceColor * 0.5);
-          color += glowColor * uBeatIntensity * 0.5;
+          color += glowColor * uDecay * 0.4;
           color += uHighlightColor * fresnel * uEnergy * 0.8;
 
           // Pulsing inner glow
           float pulse = 0.5 + 0.5 * sin(uTime * 2.0);
-          color += uGlowColor * pulse * 0.1 * (1.0 + uBass);
+          color += uGlowColor * pulse * 0.1 * (1.0 + uDecay);
 
           gl_FragColor = vec4(color, 1.0);
         }
@@ -190,14 +208,16 @@ export const CoreGeometry: React.FC<CoreGeometryProps> = ({
   shaderMaterial.uniforms.uMid.value = audioFrame.mid;
   shaderMaterial.uniforms.uEnergy.value = audioFrame.energy;
   shaderMaterial.uniforms.uBeatIntensity.value = audioFrame.beatIntensity;
+  shaderMaterial.uniforms.uDecay.value = audioFrame.decay;
+  shaderMaterial.uniforms.uDecayPhase.value = audioFrame.decayPhase;
 
   // Slow rotation
   const rotationY = time * 0.2;
   const rotationX = time * 0.1;
 
-  // Scale pulse on beats
+  // Minimal scale effect - most reactivity is in shader peaks
   const baseScale = 1.5;
-  const beatScale = 1 + audioFrame.beatIntensity * 0.15;
+  const beatScale = 1 + audioFrame.decay * 0.05;
 
   return (
     <mesh

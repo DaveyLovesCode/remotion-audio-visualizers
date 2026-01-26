@@ -158,11 +158,26 @@ export const AudioVisualizer: React.FC = () => {
   // Bass (100-500 Hz) is the primary driver
   const bassValue = bands.bass ?? 0;
   const prevBassRef = useRef(0);
+  const decayRef = useRef(0);
+  const decayPhaseRef = useRef(0);
 
   // Simple beat detection: bass spike above threshold
   const isBeat = bassValue > 0.4 && bassValue > prevBassRef.current * 1.2;
   const beatIntensity = isBeat ? Math.min(1, bassValue * 1.5) : 0;
   prevBassRef.current = bassValue;
+
+  // Decay signal: jumps up with bass, decays smoothly back down
+  // This creates the "cushion" effect instead of instant snap-back
+  const decayRate = 0.92; // Adjust for faster/slower decay (higher = slower)
+  const prevDecay = decayRef.current;
+  const decay = Math.max(bassValue, prevDecay * decayRate);
+  decayRef.current = decay;
+
+  // Accumulated phase from decay - for evolving/rotating effects
+  // Higher decay = faster phase accumulation
+  const phaseSpeed = 0.15; // Radians per frame at max decay
+  const decayPhase = decayPhaseRef.current + decay * phaseSpeed;
+  decayPhaseRef.current = decayPhase;
 
   const audioFrame: AudioFrame = {
     bass: bassValue,
@@ -173,6 +188,8 @@ export const AudioVisualizer: React.FC = () => {
     energy,
     isBeat,
     beatIntensity,
+    decay,
+    decayPhase,
   };
 
   return (

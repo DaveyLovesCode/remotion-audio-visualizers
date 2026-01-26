@@ -12,6 +12,12 @@ export interface AudioFrame {
   // Beat detection
   isBeat: boolean;
   beatIntensity: number;
+
+  // Audio-reactive driver with decay - use this for smooth cushioned reactivity
+  // Jumps up with bass, decays smoothly back down
+  decay: number;
+  // Accumulated phase from decay - use for evolving/rotating effects
+  decayPhase: number;
 }
 
 export interface AudioAnalysis {
