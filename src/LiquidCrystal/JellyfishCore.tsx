@@ -193,18 +193,8 @@ export const JellyfishCore: React.FC<JellyfishCoreProps> = ({
   shaderMaterial.uniforms.uBass.value = bass;
   shaderMaterial.uniforms.uEnergy.value = audioFrame.energy;
 
-  // Jellyfish swims horizontally - bell faces forward (-Z), rotated 90° around X
-  // Plus subtle swimming wobble
-  const swimPitch = -Math.PI / 2; // Pitch forward to swim horizontally
-  const wobbleY = Math.sin(time * 0.4) * 0.06; // Yaw wobble
-  const wobbleZ = Math.sin(time * 0.35 + 1) * 0.04; // Roll wobble
-
-  // Subtle scale pulse
-  const baseScale = 1.3;
-  const beatPunch = 1 + decay * 0.12;
-
   return (
-    <mesh rotation={[swimPitch + wobbleZ, wobbleY, 0]} scale={baseScale * beatPunch}>
+    <mesh>
       <sphereGeometry args={[1, 32, 32, Math.PI]} />
       <primitive object={shaderMaterial} attach="material" />
     </mesh>

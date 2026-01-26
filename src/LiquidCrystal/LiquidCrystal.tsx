@@ -3,10 +3,10 @@ import { useCurrentFrame, useVideoConfig, staticFile } from "remotion";
 import { Audio } from "@remotion/media";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, type RefObject } from "react";
 import { useAudioAnalysis } from "../audio/useAudioAnalysis";
 import type { AudioFrame } from "../audio/types";
-import { JellyfishCore } from "./JellyfishCore";
+import { JellyRig } from "./JellyRig";
 import { Tendrils } from "./Tendrils";
 import { OceanEnvironment } from "./OceanEnvironment";
 import { CausticOverlay } from "./CausticOverlay";
@@ -22,18 +22,22 @@ const OrbitalCamera: React.FC<{
   frame: number;
   fps: number;
   audioFrame: AudioFrame;
-}> = ({ frame, fps, audioFrame }) => {
+  targetRef?: RefObject<THREE.Object3D | null>;
+}> = ({ frame, fps, audioFrame, targetRef }) => {
   const { camera } = useThree();
   const time = frame / fps;
 
   const angleRef = useRef(0);
   const lastTimeRef = useRef(0);
+  const smoothedTargetRef = useRef(new THREE.Vector3(0, 0, 0));
+  const tmpTargetRef = useRef(new THREE.Vector3(0, 0, 0));
 
   const decay = audioFrame.decay ?? 0;
 
   // Reset if Remotion seeks backwards
   if (time < lastTimeRef.current - 0.05) {
     angleRef.current = time * 0.15;
+    smoothedTargetRef.current.set(0, 0, 0);
   }
 
   // Throttle: decay boosts angular velocity, naturally decays back to base
@@ -77,8 +81,23 @@ const OrbitalCamera: React.FC<{
   // Subtle dutch angle - must rotateZ AFTER lookAt, not overwrite rotation.z
   const dutchAngle = Math.sin(angle * 0.19) * 0.04 + decay * 0.03;
 
-  camera.position.set(x, y, z);
-  camera.lookAt(0, 0, 0);
+  const target = tmpTargetRef.current;
+  if (targetRef?.current) {
+    targetRef.current.getWorldPosition(target);
+  } else {
+    target.set(0, 0, 0);
+  }
+
+  const smooth = smoothedTargetRef.current;
+  if (deltaTime === 0) {
+    smooth.copy(target);
+  } else {
+    const follow = 1 - Math.exp(-deltaTime * 6.0);
+    smooth.lerp(target, Math.min(1, Math.max(0, follow)));
+  }
+
+  camera.position.set(smooth.x + x, smooth.y + y, smooth.z + z);
+  camera.lookAt(smooth.x, smooth.y, smooth.z);
   camera.rotateZ(dutchAngle);
 
   return null;
@@ -92,6 +111,9 @@ const Scene: React.FC<{
   fps: number;
   audioFrame: AudioFrame;
 }> = ({ frame, fps, audioFrame }) => {
+  const jellyRootRef = useRef<THREE.Group | null>(null);
+  const tendrilAnchorRef = useRef<THREE.Group | null>(null);
+
   // Performance tracking - expose to window for measurement
   // Track on every render by using frame as dependency
   const perfRef = useRef({ initialized: false });
@@ -120,7 +142,7 @@ const Scene: React.FC<{
 
   return (
     <>
-      <OrbitalCamera frame={frame} fps={fps} audioFrame={audioFrame} />
+      <OrbitalCamera frame={frame} fps={fps} audioFrame={audioFrame} targetRef={jellyRootRef} />
 
       {/* Deep underwater lighting - oriented for horizontal swimming */}
       <ambientLight intensity={0.06} color="#001828" />
@@ -132,8 +154,8 @@ const Scene: React.FC<{
       <pointLight position={[4, 0, 2]} intensity={0.25} color="#ff00ff" />
 
       <OceanEnvironment frame={frame} audioFrame={audioFrame} fps={fps} />
-      <JellyfishCore frame={frame} audioFrame={audioFrame} fps={fps} />
-      <Tendrils frame={frame} audioFrame={audioFrame} fps={fps} count={14} />
+      <JellyRig frame={frame} audioFrame={audioFrame} fps={fps} rootRef={jellyRootRef} tendrilAnchorRef={tendrilAnchorRef} />
+      <Tendrils frame={frame} audioFrame={audioFrame} fps={fps} count={14} anchorRef={tendrilAnchorRef} />
     </>
   );
 };

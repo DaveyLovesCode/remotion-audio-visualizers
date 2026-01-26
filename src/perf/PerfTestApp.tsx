@@ -1,8 +1,8 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, type RefObject } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { AudioFrame } from "../audio/types";
-import { JellyfishCore } from "../LiquidCrystal/JellyfishCore";
+import { JellyRig } from "../LiquidCrystal/JellyRig";
 import { Tendrils } from "../LiquidCrystal/Tendrils";
 import { OceanEnvironment } from "../LiquidCrystal/OceanEnvironment";
 import { CausticOverlay } from "../LiquidCrystal/CausticOverlay";
@@ -86,14 +86,18 @@ function generateMockAudioFrame(time: number): AudioFrame {
 const OrbitalCamera: React.FC<{
   time: number;
   decay: number;
-}> = ({ time, decay }) => {
+  targetRef?: RefObject<THREE.Object3D | null>;
+}> = ({ time, decay, targetRef }) => {
   const angleRef = useRef(0);
   const lastTimeRef = useRef(0);
+  const smoothedTargetRef = useRef(new THREE.Vector3(0, 0, 0));
+  const tmpTargetRef = useRef(new THREE.Vector3(0, 0, 0));
 
   useFrame(({ camera }) => {
     // Reset if time went backwards
     if (time < lastTimeRef.current - 0.05) {
       angleRef.current = time * 0.15;
+      smoothedTargetRef.current.set(0, 0, 0);
     }
 
     const baseSpeed = 0.02;
@@ -131,8 +135,23 @@ const OrbitalCamera: React.FC<{
 
     const dutchAngle = Math.sin(angle * 0.19) * 0.04 + decay * 0.03;
 
-    camera.position.set(x, y, z);
-    camera.lookAt(0, 0, 0);
+    const target = tmpTargetRef.current;
+    if (targetRef?.current) {
+      targetRef.current.getWorldPosition(target);
+    } else {
+      target.set(0, 0, 0);
+    }
+
+    const smooth = smoothedTargetRef.current;
+    if (deltaTime === 0) {
+      smooth.copy(target);
+    } else {
+      const follow = 1 - Math.exp(-deltaTime * 6.0);
+      smooth.lerp(target, Math.min(1, Math.max(0, follow)));
+    }
+
+    camera.position.set(smooth.x + x, smooth.y + y, smooth.z + z);
+    camera.lookAt(smooth.x, smooth.y, smooth.z);
     camera.rotateZ(dutchAngle);
   });
 
@@ -149,10 +168,12 @@ const Scene: React.FC<{
 }> = ({ frame, fps, audioFrame }) => {
   const time = frame / fps;
   const decay = audioFrame.decay ?? 0;
+  const jellyRootRef = useRef<THREE.Group | null>(null);
+  const tendrilAnchorRef = useRef<THREE.Group | null>(null);
 
   return (
     <>
-      <OrbitalCamera time={time} decay={decay} />
+      <OrbitalCamera time={time} decay={decay} targetRef={jellyRootRef} />
 
       {/* Lighting - matches LiquidCrystal.tsx */}
       <ambientLight intensity={0.06} color="#001828" />
@@ -162,8 +183,8 @@ const Scene: React.FC<{
 
       {/* Real scene components */}
       <OceanEnvironment frame={frame} audioFrame={audioFrame} fps={fps} />
-      <JellyfishCore frame={frame} audioFrame={audioFrame} fps={fps} />
-      <Tendrils frame={frame} audioFrame={audioFrame} fps={fps} count={14} />
+      <JellyRig frame={frame} audioFrame={audioFrame} fps={fps} rootRef={jellyRootRef} tendrilAnchorRef={tendrilAnchorRef} />
+      <Tendrils frame={frame} audioFrame={audioFrame} fps={fps} count={14} anchorRef={tendrilAnchorRef} />
     </>
   );
 };
