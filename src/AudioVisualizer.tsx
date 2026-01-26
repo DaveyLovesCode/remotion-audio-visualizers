@@ -153,7 +153,7 @@ export const AudioVisualizer: React.FC = () => {
 
   // Decay signal: jumps up with bass, decays smoothly back down
   // This creates the "cushion" effect instead of instant snap-back
-  const decayRate = 0.92; // Adjust for faster/slower decay (higher = slower)
+  const decayRate = 0.89; // Adjust for faster/slower decay (higher = slower)
   const prevDecay = decayRef.current;
   const decay = Math.max(bassValue, prevDecay * decayRate);
   decayRef.current = decay;
