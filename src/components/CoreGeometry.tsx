@@ -218,17 +218,19 @@ export const CoreGeometry: React.FC<CoreGeometryProps> = ({
           color += uGlowColor * fresnel * 0.35;
 
           // === REACTIVE INTENSIFICATION (beats) ===
-          // Everything intensifies with decay, but scaled by height
+          // Compress decay at the high end to preserve dynamic range
+          float decayCompressed = uDecay * (1.0 - uDecay * 0.3); // Soft knee compression
+
           // Valleys darken
-          color *= (1.0 - isValley * uDecay * 0.5);
+          color *= (1.0 - isValley * decayCompressed * 0.5);
 
           // Peaks get brighter - additive glow scaled by height
           vec3 reactiveGlow = mix(uGlowColor, uHighlightColor, heightPow);
-          color += reactiveGlow * heightPow * uDecay * 0.6;
+          color += reactiveGlow * heightPow * decayCompressed * 0.5;
 
-          // Tips get extra hot pink
-          float tipBoost = smoothstep(0.5, 0.8, heightNorm) * uDecay;
-          color += vec3(1.0, 0.5, 0.75) * tipBoost * 0.5;
+          // Tips get extra hot pink - but tamed
+          float tipBoost = smoothstep(0.5, 0.8, heightNorm) * decayCompressed;
+          color += vec3(1.0, 0.5, 0.75) * tipBoost * 0.35;
 
           // Fresnel intensifies on beats
           color += uGlowColor * fresnel * uDecay * 0.2;
