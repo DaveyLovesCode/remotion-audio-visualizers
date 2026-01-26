@@ -1,1 +1,0 @@
-export { GPUParticles } from "./GPUParticles";
