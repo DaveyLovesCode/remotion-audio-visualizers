@@ -183,31 +183,30 @@ export const LiquidCrystal: React.FC = () => {
   }
 
   // Single FFT call - returns both averaged bands AND fill percentages
-  // EDM kick drum anatomy:
-  //   - Sub/thump: 40-80 Hz (the weight)
-  //   - Punch: 60-120 Hz (the impact)
-  //   - Body: 100-200 Hz (fullness)
-  // We target 50-120 Hz to catch the punch without too much sub rumble
-  const { bands, fill, energy } = useAudioAnalysis({
+  // Values tuned via spectrum picker for this specific track
+  const { bands, fill, energy, _debug } = useAudioAnalysis({
     src: AUDIO_SRC,
     bands: [
-      { name: "kick", minHz: 50, maxHz: 120 },   // EDM kick sweet spot
-      { name: "bass", minHz: 80, maxHz: 250 },   // Bass + kick body
+      { name: "kick", minHz: 120, maxHz: 141 },  // Tuned via spectrum picker
+      { name: "bass", minHz: 80, maxHz: 250 },
       { name: "lowMid", minHz: 250, maxHz: 2000 },
       { name: "mid", minHz: 2000, maxHz: 4000 },
       { name: "high", minHz: 4000, maxHz: 12000 },
     ],
-    numberOfSamples: 2048, // Higher resolution for low frequencies
+    numberOfSamples: 4096, // Match spectrum picker
     smoothing: false,
     gate: { floor: 0.2, ceiling: 0.6 },
-    // Fill gate: low floor to catch kicks, low ceiling so they hit 100%
-    fillGate: { floor: 0.08, ceiling: 0.35 },
+    fillGate: { floor: 0.89, ceiling: 0.99 }, // Tuned via spectrum picker
+    _returnDebug: true,
   });
 
+  // DEBUG: See what values Remotion is actually giving us
+  if (frame % 30 === 0 && _debug) {
+    console.log(`[DEBUG] frame=${frame} peak=${_debug.kickPeak?.toFixed(3)} fill=${fill.kick?.toFixed(3)}`);
+  }
+
   const time = frame / fps;
-  // Use fill.kick for clean detection, boost by 2x for more intensity
-  const rawKick = fill.kick ?? 0;
-  const bassValue = Math.min(1, rawKick * 2); // 2x boost, clamped
+  const bassValue = fill.kick ?? 0;
   const prevBassRef = useRef(0);
   const pulsePhaseRef = useRef(0);
   const lastFrameRef = useRef(-1);
