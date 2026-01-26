@@ -92,6 +92,32 @@ const Scene: React.FC<{
   fps: number;
   audioFrame: AudioFrame;
 }> = ({ frame, fps, audioFrame }) => {
+  // Performance tracking - expose to window for measurement
+  // Track on every render by using frame as dependency
+  const perfRef = useRef({ initialized: false });
+  if (!perfRef.current.initialized) {
+    perfRef.current.initialized = true;
+    const w = window as typeof window & { __perfData?: { renderCount: number; lastTime: number; samples: number[]; lastSampleTime: number } };
+    w.__perfData = { renderCount: 0, lastTime: performance.now(), samples: [], lastSampleTime: performance.now() };
+  }
+
+  // This runs on every render (frame change)
+  const w = window as typeof window & { __perfData?: { renderCount: number; lastTime: number; samples: number[]; lastSampleTime: number } };
+  if (w.__perfData) {
+    const now = performance.now();
+    w.__perfData.renderCount++;
+
+    const elapsed = now - w.__perfData.lastSampleTime;
+    if (elapsed >= 1000) {
+      const fps = (w.__perfData.renderCount * 1000) / elapsed;
+      w.__perfData.samples.push(fps);
+      if (w.__perfData.samples.length > 30) w.__perfData.samples.shift();
+      w.__perfData.renderCount = 0;
+      w.__perfData.lastSampleTime = now;
+    }
+    w.__perfData.lastTime = now;
+  }
+
   return (
     <>
       <OrbitalCamera frame={frame} fps={fps} audioFrame={audioFrame} />

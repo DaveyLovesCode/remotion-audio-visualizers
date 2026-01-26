@@ -36,6 +36,11 @@
       result: null,
     };
 
+    function seededRandom(seed) {
+      const x = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
+      return x - Math.floor(x);
+    }
+
     // Scene setup
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(55, WIDTH / HEIGHT, 0.1, 1000);
@@ -52,7 +57,7 @@
     mainLight.position.set(0, 0.3, -0.5);
     scene.add(mainLight);
 
-    // Jellyfish shader material (simplified from JellyfishCore.tsx)
+    // Jellyfish shader material
     const jellyfishMaterial = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
@@ -173,7 +178,7 @@
     jellyfish.scale.setScalar(1.3);
     scene.add(jellyfish);
 
-    // Particles (from OceanEnvironment)
+    // Particles (600 like actual scene)
     const particleCount = 600;
     const particleGeometry = new THREE.BufferGeometry();
     const positions = new Float32Array(particleCount * 3);
@@ -193,33 +198,145 @@
     const particles = new THREE.Points(particleGeometry, particleMaterial);
     scene.add(particles);
 
-    // Tendrils (simplified)
-    const tendrilCount = 14;
-    const tendrils = [];
+    // ============================================================
+    // TENDRILS - matches Tendrils.tsx behavior exactly
+    // 12 tendrils, geometry rebuilt when quantizedPhase changes (~30/sec)
+    // ============================================================
+    const tendrilCount = 12;
+    const tendrilConfigs = [];
     for (let i = 0; i < tendrilCount; i++) {
       const angle = (i / tendrilCount) * Math.PI * 2;
-      const radius = 0.4;
-      const points = [];
-      for (let j = 0; j <= 20; j++) {
-        const t = j / 20;
-        points.push(new THREE.Vector3(
-          Math.cos(angle) * radius + Math.sin(t * 3) * t * 0.3,
-          -t * 2.5,
-          Math.sin(angle) * radius + Math.cos(t * 2) * t * 0.2
-        ));
+      tendrilConfigs.push({
+        baseAngle: angle,
+        radiusOffset: 0.35 + seededRandom(i * 7) * 0.25,
+        length: 2.5 + seededRandom(i * 11) * 1.5,
+        phaseOffset: seededRandom(i * 13) * Math.PI * 2,
+        thickness: 0.035 + seededRandom(i * 17) * 0.03,
+        segments: 32,
+      });
+    }
+
+    const tendrilMaterial = new THREE.MeshBasicMaterial({
+      color: 0x00ff88,
+      transparent: true,
+      opacity: 0.5,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    });
+
+    const tendrilGroup = new THREE.Group();
+    tendrilGroup.position.set(0, 0, 0.3);
+    tendrilGroup.rotation.x = -Math.PI / 2;
+    scene.add(tendrilGroup);
+
+    let tendrilMeshes = [];
+    let lastQuantizedPhase = -999;
+
+    function rebuildTendrils(quantizedPhase) {
+      // Dispose old geometries
+      tendrilMeshes.forEach(m => {
+        tendrilGroup.remove(m);
+        m.geometry.dispose();
+      });
+      tendrilMeshes = [];
+
+      // Rebuild all 12 tendrils (matching Tendrils.tsx)
+      for (let i = 0; i < tendrilCount; i++) {
+        const tendril = tendrilConfigs[i];
+        const attachX = Math.cos(tendril.baseAngle) * tendril.radiusOffset;
+        const attachZ = Math.sin(tendril.baseAngle) * tendril.radiusOffset;
+
+        const points = [];
+        for (let j = 0; j <= tendril.segments; j++) {
+          const t = j / tendril.segments;
+          const y = -t * tendril.length;
+
+          const swayAmount = Math.pow(t, 1.3) * 0.8;
+          const swayPhase = quantizedPhase + tendril.phaseOffset;
+          const swayX = Math.sin(swayPhase * 0.8 + t * 2.5) * swayAmount;
+          const swayZ = Math.cos(swayPhase * 0.6 + t * 2.0) * swayAmount * 0.6;
+
+          const secondaryX = Math.sin(swayPhase * 0.3 + t * 1.2 + i) * swayAmount * 0.25;
+          const secondaryZ = Math.cos(swayPhase * 0.25 + t * 1.0 + i * 0.5) * swayAmount * 0.2;
+
+          points.push(new THREE.Vector3(
+            attachX + swayX + secondaryX,
+            y,
+            attachZ + swayZ + secondaryZ
+          ));
+        }
+
+        const curve = new THREE.CatmullRomCurve3(points);
+        const tubeGeom = new THREE.TubeGeometry(curve, 24, tendril.thickness * 1.5, 8, false);
+        const mesh = new THREE.Mesh(tubeGeom, tendrilMaterial);
+        tendrilGroup.add(mesh);
+        tendrilMeshes.push(mesh);
       }
-      const curve = new THREE.CatmullRomCurve3(points);
-      const tubeGeom = new THREE.TubeGeometry(curve, 16, 0.03, 6, false);
-      const tendrilMesh = new THREE.Mesh(tubeGeom, new THREE.MeshBasicMaterial({
-        color: 0x00ff88,
-        transparent: true,
-        opacity: 0.5,
-        blending: THREE.AdditiveBlending,
-      }));
-      tendrilMesh.position.set(0, 0, 0.3);
-      tendrilMesh.rotation.x = -Math.PI / 2;
-      scene.add(tendrilMesh);
-      tendrils.push({ mesh: tendrilMesh, angle, basePoints: points });
+    }
+
+    // ============================================================
+    // SEAWEED - matches OceanEnvironment.tsx behavior exactly
+    // 50 seaweed strands, geometry rebuilt when quantizedTime changes (~20/sec)
+    // ============================================================
+    const seaweedCount = 50;
+    const seaweedLoopLength = 180;
+    const seaweedConfigs = [];
+    for (let i = 0; i < seaweedCount; i++) {
+      seaweedConfigs.push({
+        x: (seededRandom(i * 37) - 0.5) * 40,
+        zOffset: (i / seaweedCount) * seaweedLoopLength + seededRandom(i * 41) * 8,
+        height: 2.0 + seededRandom(i * 43) * 2.5,
+        phase: seededRandom(i * 47) * Math.PI * 2,
+        thickness: 0.08 + seededRandom(i * 53) * 0.1,
+      });
+    }
+
+    const seaweedMaterial = new THREE.MeshBasicMaterial({
+      color: 0x0a5030,
+      transparent: true,
+      opacity: 0.6,
+      side: THREE.DoubleSide,
+    });
+
+    let seaweedMeshes = [];
+    let lastQuantizedTime = -999;
+
+    function rebuildSeaweed(quantizedTime, travel) {
+      // Dispose old geometries
+      seaweedMeshes.forEach(m => {
+        scene.remove(m);
+        m.geometry.dispose();
+      });
+      seaweedMeshes = [];
+
+      // Rebuild all 50 seaweed strands (matching OceanEnvironment.tsx)
+      for (let i = 0; i < seaweedCount; i++) {
+        const weed = seaweedConfigs[i];
+        const segments = 12;
+        const points = [];
+
+        for (let j = 0; j <= segments; j++) {
+          const t = j / segments;
+          const swayPhase = quantizedTime * 1.5 + weed.phase + t * 2;
+          const sway = Math.sin(swayPhase) * 0.3 * t * t;
+          const secondarySway = Math.sin(swayPhase * 1.7 + 1) * 0.15 * t;
+          points.push(new THREE.Vector3(
+            sway + secondarySway,
+            t * weed.height,
+            Math.sin(swayPhase * 0.8) * 0.1 * t
+          ));
+        }
+
+        const curve = new THREE.CatmullRomCurve3(points);
+        const tubeGeom = new THREE.TubeGeometry(curve, 8, weed.thickness, 6, false);
+        const mesh = new THREE.Mesh(tubeGeom, seaweedMaterial);
+
+        const z = ((weed.zOffset + travel) % seaweedLoopLength) - 80;
+        mesh.position.set(weed.x, -5, z);
+
+        scene.add(mesh);
+        seaweedMeshes.push(mesh);
+      }
     }
 
     // Animation
@@ -228,16 +345,54 @@
     let warmupComplete = false;
     let measurementStart = null;
 
+    // Phase accumulation (matching Tendrils.tsx)
+    let phase = 0;
+    let lastTime = 0;
+    const baseSpeed = 1.0;
+    const boostSpeed = 3.0;
+
+    // Travel accumulation (matching OceanEnvironment.tsx)
+    let travel = 0;
+    const travelBaseSpeed = 4.0;
+    const travelBoostSpeed = 35.0;
+
     function animate() {
       if (window.__fpsData.done) return;
 
-      requestAnimationFrame(animate);
-
-      const elapsed = clock.getElapsedTime();
       const now = performance.now();
+      const elapsed = clock.getElapsedTime();
 
       // Simulated audio decay (pulsing)
       const decay = (Math.sin(elapsed * 2) * 0.5 + 0.5) * 0.7;
+
+      // Update phase (matching Tendrils.tsx accumulation)
+      const deltaTime = Math.min(elapsed - lastTime, 0.1);
+      if (deltaTime > 0) {
+        phase += (baseSpeed + decay * boostSpeed) * deltaTime;
+        travel += (travelBaseSpeed + decay * travelBoostSpeed) * deltaTime;
+      }
+      lastTime = elapsed;
+
+      // Quantize phase at 30/sec (matching Tendrils.tsx)
+      const quantizedPhase = Math.floor(phase * 30) / 30;
+      if (quantizedPhase !== lastQuantizedPhase) {
+        rebuildTendrils(quantizedPhase);
+        lastQuantizedPhase = quantizedPhase;
+      }
+
+      // Quantize time at 20/sec (matching OceanEnvironment.tsx)
+      const quantizedTime = Math.floor(elapsed * 20) / 20;
+      if (quantizedTime !== lastQuantizedTime) {
+        rebuildSeaweed(quantizedTime, travel);
+        lastQuantizedTime = quantizedTime;
+      }
+
+      // Update seaweed positions (they move with travel even between rebuilds)
+      seaweedMeshes.forEach((mesh, i) => {
+        const weed = seaweedConfigs[i];
+        const z = ((weed.zOffset + travel) % seaweedLoopLength) - 80;
+        mesh.position.z = z;
+      });
 
       // Update jellyfish
       jellyfishMaterial.uniforms.uTime.value = elapsed;
@@ -301,8 +456,12 @@
             window.__fpsData.result = { error: "No samples collected" };
           }
           document.getElementById('status').textContent = 'Done: ' + JSON.stringify(window.__fpsData.result);
+          return;
         }
       }
+
+      // Use setTimeout(0) to measure uncapped FPS
+      setTimeout(animate, 0);
     }
 
     animate();
