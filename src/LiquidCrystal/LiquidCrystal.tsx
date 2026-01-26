@@ -15,10 +15,10 @@ import { HolographicUI } from "./HolographicUI";
 const AUDIO_SRC = staticFile("music.wav");
 
 /**
- * Chase camera - locked behind the jellyfish as it rips forward
- * Uses frame-based animation (no refs) so seeking/looping works correctly
+ * Orbital camera - swings around the jellyfish with audio-reactive throttle
+ * Uses accumulated angle with layered sines for smooth organic wandering
  */
-const ChaseCamera: React.FC<{
+const OrbitalCamera: React.FC<{
   frame: number;
   fps: number;
   audioFrame: AudioFrame;
@@ -26,35 +26,60 @@ const ChaseCamera: React.FC<{
   const { camera } = useThree();
   const time = frame / fps;
 
+  const angleRef = useRef(0);
+  const lastTimeRef = useRef(0);
+
   const decay = audioFrame.decay ?? 0;
 
-  // Camera is BEHIND the jellyfish (positive Z), looking forward (-Z)
-  // All motion is frame-based (deterministic) for Remotion compatibility
+  // Reset if Remotion seeks backwards
+  if (time < lastTimeRef.current - 0.05) {
+    angleRef.current = time * 0.15;
+  }
 
-  // Base position: behind and slightly above
-  const baseZ = 6;
-  const baseY = 0.5;
+  // Throttle: decay boosts angular velocity, naturally decays back to base
+  const baseSpeed = 0.02;
+  const throttleBoost = 1.2;
+  const currentSpeed = baseSpeed + decay * throttleBoost;
 
-  // Gentle sway - subtle movement so it's not static
-  const swayX = Math.sin(time * 0.4) * 0.8;
-  const swayY = Math.sin(time * 0.3 + 1) * 0.4;
+  const deltaTime = Math.max(0, time - lastTimeRef.current);
+  if (deltaTime > 0 && deltaTime < 0.1) {
+    angleRef.current += currentSpeed * deltaTime;
+  }
+  lastTimeRef.current = time;
 
-  // Beat punch - camera pushes forward on kicks
-  const punchZ = decay * 1.5;
+  const angle = angleRef.current;
 
-  // Breathing motion
-  const breatheZ = Math.sin(time * 0.25) * 0.3;
+  // Tighter radius - keep jellyfish prominent but not too close
+  const baseRadius = 5.0;
+  const radiusWander =
+    Math.sin(angle * 0.31) * 0.8 +
+    Math.sin(angle * 0.13) * 0.4 +
+    Math.cos(angle * 0.47) * 0.2;
+  const radius = baseRadius + radiusWander; // Range: ~3.6 to ~6.4
 
-  const x = swayX;
-  const y = baseY + swayY;
-  const z = baseZ - punchZ + breatheZ;
+  // Height varies faster than orbit for dynamic up/down movement
+  // Negative = under the belly looking up, positive = above looking down
+  const baseHeight = 0.3;
+  const heightWander =
+    Math.sin(angle * 0.7) * 2.5 +
+    Math.cos(angle * 1.1) * 1.0 +
+    Math.sin(angle * 1.7) * 0.5;
+  const height = baseHeight + heightWander; // Range: ~-3.7 to ~4.3
 
-  // Subtle dutch angle
-  const dutchAngle = Math.sin(time * 0.2) * 0.03;
+  // Orbit wobble - breaks the perfect circle
+  const wobbleX = Math.sin(angle * 0.53) * 1.0;
+  const wobbleZ = Math.cos(angle * 0.41) * 0.8;
+
+  const x = Math.sin(angle) * radius + wobbleX;
+  const z = Math.cos(angle) * radius + wobbleZ;
+  const y = height;
+
+  // Subtle dutch angle - must rotateZ AFTER lookAt, not overwrite rotation.z
+  const dutchAngle = Math.sin(angle * 0.19) * 0.04 + decay * 0.03;
 
   camera.position.set(x, y, z);
-  camera.lookAt(0, 0, -2); // Look ahead of the jellyfish
-  camera.rotation.z = dutchAngle;
+  camera.lookAt(0, 0, 0);
+  camera.rotateZ(dutchAngle); // Rotate around local view axis
   camera.updateProjectionMatrix();
 
   return null;
@@ -70,7 +95,7 @@ const Scene: React.FC<{
 }> = ({ frame, fps, audioFrame }) => {
   return (
     <>
-      <ChaseCamera frame={frame} fps={fps} audioFrame={audioFrame} />
+      <OrbitalCamera frame={frame} fps={fps} audioFrame={audioFrame} />
 
       {/* Deep underwater lighting - oriented for horizontal swimming */}
       <ambientLight intensity={0.06} color="#001828" />

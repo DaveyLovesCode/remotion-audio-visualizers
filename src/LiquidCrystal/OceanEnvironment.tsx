@@ -31,8 +31,8 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
   const travelRef = useRef(0);
   const lastTimeRef = useRef(0);
 
-  // SUPERSONIC base speed + massive boost on beats
-  const baseSpeed = 12.0;
+  // Lower base cruise, massive boost on beats
+  const baseSpeed = 4.0;
   const boostSpeed = 35.0;
 
   // Detect loop/seek - if time goes backwards, reset to deterministic base
