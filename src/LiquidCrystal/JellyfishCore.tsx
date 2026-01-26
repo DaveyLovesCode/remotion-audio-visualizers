@@ -100,23 +100,23 @@ export const JellyfishCore: React.FC<JellyfishCoreProps> = ({
           float verticalPos = position.y;
           float bellFactor = smoothstep(-1.0, 0.5, verticalPos);
 
-          // Smooth contraction on beats
-          float contraction = uDecay * 0.3 * bellFactor;
+          // Expand outward on beats
+          float expansion = uDecay * 0.075 * bellFactor;
 
-          // Organic undulation - smooth, not chaotic
+          // Subtle constant undulation for life + stronger on beats
           vec3 noisePos = position * 2.0;
           noisePos.x += uDecayPhase * 0.4;
-          float undulation = snoise(noisePos + uTime * 0.3) * 0.12;
-          undulation += snoise(noisePos * 1.5 + uTime * 0.5) * 0.06;
-          undulation *= (1.0 + uMid * 0.5 + uDecay * 0.8);
+          float undulationBase = snoise(noisePos + uTime * 0.3) * 0.12;
+          undulationBase += snoise(noisePos * 1.5 + uTime * 0.5) * 0.06;
+          float undulation = undulationBase * (0.15 + uDecay * 0.75);
 
-          // Gentle ripple waves
-          float ripple = sin(verticalPos * 8.0 - uTime * 3.0 - uDecayPhase * 2.0) * 0.04 * uDecay;
+          // Gentle ripple waves - beat driven
+          float ripple = sin(verticalPos * 8.0 - uTime * 3.0 - uDecayPhase * 2.0) * 0.015 * uDecay;
 
-          // Breathe
-          float breathe = sin(uTime * 1.5) * 0.06;
+          // Subtle constant breathe + stronger on beats
+          float breathe = sin(uTime * 1.5) * 0.03 * (0.3 + uDecay * 0.5);
 
-          float displacement = -contraction + undulation + ripple + breathe;
+          float displacement = expansion + undulation + ripple + breathe;
           vDisplacement = displacement;
 
           vec3 newPosition = position + normal * displacement;
