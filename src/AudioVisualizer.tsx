@@ -52,7 +52,7 @@ const CameraController: React.FC<{
   const angleRef = useRef(0);
   const lastTimeRef = useRef(0);
 
-  const orbitRadius = 8;
+  const baseOrbitRadius = 8;
   const baseSpeed = 0.04; // Slower base rotation
   const boostSpeed = 1.35; // Extra speed during beats (+40% from 0.96)
   const verticalOscillation = 0.5;
@@ -63,11 +63,21 @@ const CameraController: React.FC<{
   angleRef.current += (baseSpeed + decay * boostSpeed) * deltaTime;
   lastTimeRef.current = time;
 
+  // Punch-in: reduce orbit radius when decay is high
+  const punchInAmount = 0.8; // Max zoom-in distance
+  const orbitRadius = baseOrbitRadius - decay * punchInAmount;
+
+  // Wiggle: small high-frequency displacement on beats
+  const wiggleIntensity = decay * 0.06;
+  const wiggleX = Math.sin(time * 47) * wiggleIntensity;
+  const wiggleY = Math.cos(time * 53) * wiggleIntensity;
+  const wiggleZ = Math.sin(time * 41) * wiggleIntensity;
+
   const angle = angleRef.current;
-  const x = Math.sin(angle) * orbitRadius;
-  const z = Math.cos(angle) * orbitRadius;
+  const x = Math.sin(angle) * orbitRadius + wiggleX;
+  const z = Math.cos(angle) * orbitRadius + wiggleZ;
   // Vertical motion tied to same accumulated angle - unified direction
-  const y = Math.sin(angle * 0.4) * verticalOscillation + 1;
+  const y = Math.sin(angle * 0.4) * verticalOscillation + 1 + wiggleY;
 
   camera.position.set(x, y, z);
   camera.lookAt(0, 0, 0);
