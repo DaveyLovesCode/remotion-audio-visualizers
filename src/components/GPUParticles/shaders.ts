@@ -134,8 +134,8 @@ export const simulationFragmentShader = /* glsl */ `
     float clusterWave = sin(morphTime + clusterId * 0.5) * 0.4;
     pos.y += clusterWave;
 
-    // Per-particle rotation (stored in w for the render shader)
-    float particleRotation = uTime * (0.5 + localId * 2.0) + phase;
+    // Per-particle rotation - keep in 0-2PI range
+    float particleRotation = mod(uTime * (0.5 + localId * 2.0) + phase, 6.28318);
 
     // Keep particles away from center (background element)
     float distFromCenter = length(pos);
@@ -143,9 +143,15 @@ export const simulationFragmentShader = /* glsl */ `
       pos = normalize(pos) * 4.0;
     }
 
-    // === MULTIPLE CONCURRENT WAVES ===
-    // Each wave runs independently, effects are additive
-    float totalWaveInfluence = 0.0;
+    // === AMBIENT WAVE - always happening, creates pockets of visibility ===
+    // Multiple slow-moving noise-based waves
+    float ambient1 = snoise(vec3(pos.x * 0.3, pos.y * 0.3, uTime * 0.15));
+    float ambient2 = snoise(vec3(pos.y * 0.2 + 50.0, pos.z * 0.2, uTime * 0.12 + 100.0));
+    float ambientWave = (ambient1 + ambient2) * 0.5 + 0.5; // 0-1 range
+    ambientWave = smoothstep(0.4, 0.7, ambientWave) * 0.3; // Subtle pockets
+
+    // === BEAT-TRIGGERED WAVES ===
+    float beatWaveInfluence = 0.0;
 
     for (int i = 0; i < 6; i++) {
       if (i >= uWaveCount) break;
@@ -158,20 +164,21 @@ export const simulationFragmentShader = /* glsl */ `
       float frontDist = waveProgress - wavePos - 15.0;
 
       // Wave shape: fade in at front, long tail behind
-      // Leading edge: gentle fade in as wave approaches
       float leading = smoothstep(-3.0, 1.0, frontDist);
-      // Trailing edge: long gradual fade out
       float trailing = smoothstep(12.0, 0.0, frontDist);
 
       float waveInfluence = leading * trailing;
-      totalWaveInfluence += waveInfluence;
+      beatWaveInfluence += waveInfluence;
     }
 
-    // Clamp but allow some additive stacking
-    totalWaveInfluence = min(totalWaveInfluence, 1.5);
+    // Clamp beat waves but allow stacking
+    beatWaveInfluence = min(beatWaveInfluence, 1.5);
+
+    // Combine: ambient is base, beat waves add on top
+    float totalWaveInfluence = ambientWave + beatWaveInfluence;
 
     // Pack rotation and wave into output
-    // xyz = position, w encodes both rotation and wave
+    // xyz = position, w encodes both rotation (0-6.28) and wave (0-2 scaled by 100)
     float encodedData = particleRotation + totalWaveInfluence * 100.0;
     gl_FragColor = vec4(pos, encodedData);
   }
@@ -233,29 +240,40 @@ export const renderFragmentShader = /* glsl */ `
     // Soft edge for glow effect
     float softEdge = smoothstep(0.5, 0.2, dist);
 
-    // Wave intensity can stack above 1.0
-    float waveIntensity = min(vWaveOpacity, 1.5);
+    // Wave intensity - ambient is 0-0.3, beat waves add more
+    float waveIntensity = min(vWaveOpacity, 2.0);
 
-    // Colors - dim base, bright during wave, extra bright when stacked
-    vec3 colorBase = vec3(0.25, 0.0, 0.35);  // Dim purple
-    vec3 colorBright = vec3(1.0, 0.3, 0.9);  // Bright magenta
-    vec3 colorHot = vec3(1.0, 0.7, 1.0);     // Hot white-pink for stacked waves
+    // Colors - barely visible base, bright during beat waves
+    vec3 colorBase = vec3(0.15, 0.0, 0.2);   // Very dim purple
+    vec3 colorAmbient = vec3(0.3, 0.05, 0.4); // Slightly visible for ambient pockets
+    vec3 colorBright = vec3(1.0, 0.3, 0.9);  // Bright magenta for beat waves
+    vec3 colorHot = vec3(1.0, 0.8, 1.0);     // Hot white-pink for stacked
 
-    // Two-stage color: base->bright->hot
+    // Multi-stage color based on intensity
     vec3 color;
-    if (waveIntensity < 1.0) {
-      color = mix(colorBase, colorBright, waveIntensity);
+    if (waveIntensity < 0.3) {
+      // Ambient range: barely visible pockets
+      color = mix(colorBase, colorAmbient, waveIntensity / 0.3);
+    } else if (waveIntensity < 1.3) {
+      // Beat wave range
+      color = mix(colorAmbient, colorBright, (waveIntensity - 0.3) / 1.0);
     } else {
-      color = mix(colorBright, colorHot, waveIntensity - 1.0);
+      // Stacked waves - hot
+      color = mix(colorBright, colorHot, (waveIntensity - 1.3) / 0.7);
     }
 
     // Depth fade - further = more transparent
     float depthFade = smoothstep(20.0, 5.0, vDepth);
 
-    // Base opacity is low, wave makes them pop, stacking makes them glow
-    float baseAlpha = 0.1;
-    float waveAlpha = waveIntensity * 0.9;
-    float alpha = depthFade * softEdge * (baseAlpha + waveAlpha);
+    // Base is barely visible, ambient adds subtle visibility, beat waves pop
+    float alpha;
+    if (waveIntensity < 0.3) {
+      // Ambient: very subtle
+      alpha = depthFade * softEdge * waveIntensity * 0.4;
+    } else {
+      // Beat waves: much more visible
+      alpha = depthFade * softEdge * (0.12 + (waveIntensity - 0.3) * 0.7);
+    }
 
     gl_FragColor = vec4(color, alpha);
   }
