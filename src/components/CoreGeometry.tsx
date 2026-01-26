@@ -217,7 +217,7 @@ export const CoreGeometry: React.FC<CoreGeometryProps> = ({
 
   // Minimal scale effect - most reactivity is in shader peaks
   const baseScale = 1.5;
-  const beatScale = 1 + audioFrame.decay * 0.05;
+  const beatScale = 1 + (audioFrame.decay ?? 0) * 0.05;
 
   return (
     <mesh

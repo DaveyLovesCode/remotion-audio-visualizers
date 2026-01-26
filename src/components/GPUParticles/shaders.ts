@@ -18,6 +18,10 @@ export const simulationFragmentShader = /* glsl */ `
   uniform float uHigh;
   uniform float uEnergy;
   uniform float uBeatIntensity;
+  uniform float uDecay;
+  uniform float uWaveOriginX;
+  uniform float uWaveOriginY;
+  uniform float uWaveTime;
 
   varying vec2 vUv;
 
@@ -107,18 +111,13 @@ export const simulationFragmentShader = /* glsl */ `
     float localId = fract(particleId * 16.0);
     float phase = localId * 6.28318;
 
-    // Audio response - subtle, background element
-    float audioValue = uBass * 0.3 + uMid * 0.2 + uHigh * 0.1;
-
-    // === FLOCKING BEHAVIOR ===
-
-    // Slow time morphing - particles drift smoothly
+    // Steady time - no expansion or acceleration
     float morphTime = uTime * 0.08;
 
     // Get flow direction at this position (shared by nearby particles = flocking)
     vec3 flow = flowField(basePos * 0.5, uTime);
 
-    // Gentle orbital motion around center
+    // Gentle orbital motion around center - accelerated by beats
     float orbitAngle = morphTime * 0.3 + phase;
     mat3 orbitRotation = mat3(
       cos(orbitAngle), 0.0, sin(orbitAngle),
@@ -129,15 +128,14 @@ export const simulationFragmentShader = /* glsl */ `
     vec3 pos = orbitRotation * basePos;
 
     // Apply flow field - creates cohesive drifting
-    pos += flow * 0.8 * (1.0 + audioValue);
+    pos += flow * 0.8;
 
     // Gentle vertical wave - entire clusters move together
     float clusterWave = sin(morphTime + clusterId * 0.5) * 0.4;
     pos.y += clusterWave;
 
-    // Subtle breathing - expand/contract with bass
-    float breathe = 1.0 + uBass * 0.15 + uBeatIntensity * 0.1;
-    pos *= breathe;
+    // Per-particle rotation (stored in w for the render shader)
+    float particleRotation = uTime * (0.5 + localId * 2.0) + phase;
 
     // Keep particles away from center (background element)
     float distFromCenter = length(pos);
@@ -145,8 +143,19 @@ export const simulationFragmentShader = /* glsl */ `
       pos = normalize(pos) * 4.0;
     }
 
-    // Output
-    gl_FragColor = vec4(pos, audioValue);
+    // === OPACITY WAVE ===
+    // Distance from wave origin (random direction per beat)
+    vec2 waveDir = normalize(vec2(uWaveOriginX, uWaveOriginY));
+    float wavePos = dot(pos.xy, waveDir);
+    float waveProgress = uWaveTime * 40.0; // Fast sweep across scene
+    float waveDist = abs(wavePos - waveProgress + 15.0);
+    // Sharp wave front that sweeps across
+    float waveInfluence = smoothstep(4.0, 0.0, waveDist);
+
+    // Pack rotation and wave into output
+    // xyz = position, w encodes both rotation and wave
+    float encodedData = particleRotation + waveInfluence * 100.0;
+    gl_FragColor = vec4(pos, encodedData);
   }
 `;
 
@@ -158,19 +167,24 @@ export const renderVertexShader = /* glsl */ `
 
   attribute vec2 aReference;
 
-  varying float vAudioValue;
+  varying float vRotation;
+  varying float vWaveOpacity;
   varying float vDepth;
 
   void main() {
     vec4 posData = texture2D(uPositionTexture, aReference);
     vec3 pos = posData.xyz;
-    vAudioValue = posData.w;
+
+    // Decode rotation and wave from packed data
+    float encodedData = posData.w;
+    vWaveOpacity = floor(encodedData / 100.0) / 1.0;
+    vRotation = mod(encodedData, 100.0);
 
     vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
     vDepth = -mvPosition.z;
 
-    // Small, subtle particles
-    float size = uPointSize * (1.0 + vAudioValue * 0.2);
+    // Consistent small particles
+    float size = uPointSize;
     gl_PointSize = size * (100.0 / -mvPosition.z);
     gl_PointSize = clamp(gl_PointSize, 0.5, 6.0);
 
@@ -182,29 +196,35 @@ export const renderFragmentShader = /* glsl */ `
   uniform float uBeatIntensity;
   uniform float uTime;
 
-  varying float vAudioValue;
+  varying float vRotation;
+  varying float vWaveOpacity;
   varying float vDepth;
 
   void main() {
+    // Rotate point coords for per-particle rotation
+    vec2 centered = gl_PointCoord - vec2(0.5);
+    float c = cos(vRotation);
+    float s = sin(vRotation);
+    vec2 rotated = vec2(c * centered.x - s * centered.y, s * centered.x + c * centered.y);
+
     // Sharp, small particle
-    float dist = length(gl_PointCoord - vec2(0.5));
+    float dist = length(rotated);
     if (dist > 0.45) discard;
 
-    // Subtle colors - background element
-    vec3 colorLow = vec3(0.6, 0.0, 0.4);   // Dim magenta
-    vec3 colorMid = vec3(0.3, 0.0, 0.6);   // Dim purple
-    vec3 colorHigh = vec3(0.0, 0.5, 0.6);  // Dim cyan
+    // Colors - dim base, bright during wave
+    vec3 colorBase = vec3(0.3, 0.0, 0.4);   // Dim purple
+    vec3 colorBright = vec3(1.0, 0.4, 1.0); // Bright magenta for wave
 
-    vec3 color;
-    if (vAudioValue < 0.5) {
-      color = mix(colorLow, colorMid, vAudioValue * 2.0);
-    } else {
-      color = mix(colorMid, colorHigh, (vAudioValue - 0.5) * 2.0);
-    }
+    // Mix to bright color during wave
+    vec3 color = mix(colorBase, colorBright, vWaveOpacity);
 
     // Depth fade - further = more transparent
     float depthFade = smoothstep(20.0, 5.0, vDepth);
-    float alpha = depthFade * 0.5;
+
+    // Base opacity is low, wave makes them pop
+    float baseAlpha = 0.15;
+    float waveAlpha = vWaveOpacity * 0.85;
+    float alpha = depthFade * (baseAlpha + waveAlpha);
 
     gl_FragColor = vec4(color, alpha);
   }

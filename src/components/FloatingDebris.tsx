@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { AudioFrame } from "../audio/types";
 
@@ -9,6 +9,11 @@ interface FloatingDebrisProps {
   count?: number;
 }
 
+function seededRandom(seed: number): number {
+  const x = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+
 interface DebrisItem {
   position: [number, number, number];
   rotation: [number, number, number];
@@ -17,6 +22,7 @@ interface DebrisItem {
   orbitRadius: number;
   orbitOffset: number;
   verticalSpeed: number;
+  rotationSpeeds: [number, number, number];
   type: "tetra" | "octa" | "cube";
 }
 
@@ -31,6 +37,29 @@ export const FloatingDebris: React.FC<FloatingDebrisProps> = ({
   count = 30,
 }) => {
   const time = frame / fps;
+  // Rising-edge trigger: only fires when crossing above threshold
+  const triggerRef = useRef({ wasAbove: false, originX: 1, originY: 0, startTime: -10 });
+
+  // Rising-edge trigger: fires when bass crosses above 0.5, resets when drops below
+  const threshold = 0.5;
+  const isAbove = audioFrame.bass > threshold;
+
+  if (isAbove && !triggerRef.current.wasAbove) {
+    // Just crossed above threshold - trigger a new wave
+    const angle = seededRandom(frame + 500) * Math.PI * 2;
+    triggerRef.current = {
+      wasAbove: true,
+      originX: Math.cos(angle),
+      originY: Math.sin(angle),
+      startTime: time,
+    };
+  } else if (!isAbove) {
+    // Below threshold - reset so we can trigger again
+    triggerRef.current.wasAbove = false;
+  }
+
+  const waveTime = time - triggerRef.current.startTime;
+  const waveProgress = waveTime * 25;
 
   // Generate debris items
   const debris = useMemo<DebrisItem[]>(() => {
@@ -38,27 +67,32 @@ export const FloatingDebris: React.FC<FloatingDebrisProps> = ({
     const types: DebrisItem["type"][] = ["tetra", "octa", "cube"];
 
     for (let i = 0; i < count; i++) {
-      const orbitRadius = 4 + Math.random() * 6;
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.random() * Math.PI;
+      const orbitRadius = 4 + seededRandom(i * 7) * 6;
+      const theta = seededRandom(i * 11) * Math.PI * 2;
+      const phi = seededRandom(i * 13) * Math.PI;
 
       items.push({
         position: [
           orbitRadius * Math.sin(phi) * Math.cos(theta),
-          (Math.random() - 0.5) * 6,
+          (seededRandom(i * 17) - 0.5) * 6,
           orbitRadius * Math.sin(phi) * Math.sin(theta),
         ],
         rotation: [
-          Math.random() * Math.PI * 2,
-          Math.random() * Math.PI * 2,
-          Math.random() * Math.PI * 2,
+          seededRandom(i * 19) * Math.PI * 2,
+          seededRandom(i * 23) * Math.PI * 2,
+          seededRandom(i * 29) * Math.PI * 2,
         ],
-        scale: 0.05 + Math.random() * 0.15,
-        orbitSpeed: 0.05 + Math.random() * 0.1,
+        scale: 0.05 + seededRandom(i * 31) * 0.15,
+        orbitSpeed: 0.05 + seededRandom(i * 37) * 0.1,
         orbitRadius,
         orbitOffset: theta,
-        verticalSpeed: 0.1 + Math.random() * 0.2,
-        type: types[Math.floor(Math.random() * types.length)],
+        verticalSpeed: 0.1 + seededRandom(i * 41) * 0.2,
+        rotationSpeeds: [
+          0.2 + seededRandom(i * 43) * 0.8,
+          0.3 + seededRandom(i * 47) * 1.0,
+          0.15 + seededRandom(i * 53) * 0.6,
+        ],
+        type: types[Math.floor(seededRandom(i * 59) * types.length)],
       });
     }
 
@@ -71,7 +105,7 @@ export const FloatingDebris: React.FC<FloatingDebrisProps> = ({
       uniforms: {
         uTime: { value: 0 },
         uEnergy: { value: 0 },
-        uBeatIntensity: { value: 0 },
+        uWaveOpacity: { value: 0 },
       },
       vertexShader: `
         varying vec3 vNormal;
@@ -86,7 +120,7 @@ export const FloatingDebris: React.FC<FloatingDebrisProps> = ({
       fragmentShader: `
         uniform float uTime;
         uniform float uEnergy;
-        uniform float uBeatIntensity;
+        uniform float uWaveOpacity;
 
         varying vec3 vNormal;
         varying vec3 vPosition;
@@ -97,8 +131,9 @@ export const FloatingDebris: React.FC<FloatingDebrisProps> = ({
           float edge = 1.0 - abs(dot(viewDir, vNormal));
           edge = pow(edge, 2.0);
 
-          // Base color
-          vec3 color = vec3(0.2, 0.0, 0.4);
+          // Base color - dim purple
+          vec3 colorBase = vec3(0.2, 0.0, 0.4);
+          vec3 colorBright = vec3(0.8, 0.2, 1.0);
 
           // Glow color
           vec3 glowColor = mix(
@@ -107,11 +142,14 @@ export const FloatingDebris: React.FC<FloatingDebrisProps> = ({
             sin(uTime + vPosition.y) * 0.5 + 0.5
           );
 
-          color = mix(color, glowColor, edge * 0.8);
-          color += glowColor * uBeatIntensity * 0.3;
+          vec3 color = mix(colorBase, glowColor, edge * 0.6);
+          // Wave brightens the geometry
+          color = mix(color, colorBright, uWaveOpacity * 0.8);
           color *= 0.5 + uEnergy * 0.5;
 
-          float alpha = 0.4 + edge * 0.4 + uBeatIntensity * 0.2;
+          // Base alpha + wave boost
+          float baseAlpha = 0.25 + edge * 0.3;
+          float alpha = baseAlpha + uWaveOpacity * 0.6;
 
           gl_FragColor = vec4(color, alpha);
         }
@@ -123,33 +161,38 @@ export const FloatingDebris: React.FC<FloatingDebrisProps> = ({
     });
   }, []);
 
-  // Update uniforms
+  // Update base uniforms
   debrisMaterial.uniforms.uTime.value = time;
   debrisMaterial.uniforms.uEnergy.value = audioFrame.energy;
-  debrisMaterial.uniforms.uBeatIntensity.value = audioFrame.beatIntensity;
 
   return (
     <group>
       {debris.map((item, i) => {
-        // Animate position
+        // Animate position - steady time, no expansion
         const angle = item.orbitOffset + time * item.orbitSpeed;
         const x = Math.sin(angle) * item.orbitRadius;
         const z = Math.cos(angle) * item.orbitRadius;
         const y = item.position[1] + Math.sin(time * item.verticalSpeed + i) * 0.5;
 
-        // Animate rotation
-        const rotX = item.rotation[0] + time * 0.3;
-        const rotY = item.rotation[1] + time * 0.5;
-        const rotZ = item.rotation[2] + time * 0.2;
+        // Animate rotation with per-item speeds
+        const rotX = item.rotation[0] + time * item.rotationSpeeds[0];
+        const rotY = item.rotation[1] + time * item.rotationSpeeds[1];
+        const rotZ = item.rotation[2] + time * item.rotationSpeeds[2];
 
-        // Scale pulse on beats
-        const scale = item.scale * (1 + audioFrame.beatIntensity * 0.3);
+        // No scale expansion - constant size
+        const scale = item.scale;
+
+        // Calculate wave opacity for this debris piece
+        const waveDir = { x: triggerRef.current.originX, y: triggerRef.current.originY };
+        const wavePos = x * waveDir.x + y * waveDir.y;
+        const waveDist = Math.abs(wavePos - waveProgress + 10);
+        const waveOpacity = Math.max(0, 1 - waveDist / 3);
 
         // Clone material for each item
         const mat = debrisMaterial.clone();
         mat.uniforms.uTime.value = time;
         mat.uniforms.uEnergy.value = audioFrame.energy;
-        mat.uniforms.uBeatIntensity.value = audioFrame.beatIntensity;
+        mat.uniforms.uWaveOpacity.value = waveOpacity;
 
         let geometry;
         switch (item.type) {

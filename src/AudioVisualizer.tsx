@@ -6,8 +6,6 @@ import * as THREE from "three";
 import {
   CoreGeometry,
   GPUParticles,
-  EnergyRings,
-  LightBeams,
   FloatingDebris,
   BeatFlash,
 } from "./components";
@@ -107,8 +105,6 @@ const Scene: React.FC<{
       <pointLight position={[-5, -5, 5]} intensity={0.5} color="#ff0080" />
 
       <GPUParticles frame={frame} audioFrame={audioFrame} fps={fps} count={64} />
-      <LightBeams frame={frame} audioFrame={audioFrame} fps={fps} beamCount={16} />
-      <EnergyRings frame={frame} audioFrame={audioFrame} fps={fps} />
       <FloatingDebris frame={frame} audioFrame={audioFrame} fps={fps} count={40} />
       <CoreGeometry frame={frame} audioFrame={audioFrame} fps={fps} />
       <BeatFlash frame={frame} audioFrame={audioFrame} fps={fps} />

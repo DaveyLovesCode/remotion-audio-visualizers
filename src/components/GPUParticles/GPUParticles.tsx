@@ -32,6 +32,8 @@ export const GPUParticles: React.FC<GPUParticlesProps> = ({
   const { gl, scene, camera } = useThree();
   const time = frame / fps;
   const pointsRef = useRef<THREE.Points>(null);
+  // Rising-edge trigger: only fires when crossing above threshold, resets when drops below
+  const triggerRef = useRef({ wasAbove: false, originX: 1, originY: 0, startTime: -10 });
 
   // Create all GPU resources once
   const resources = useMemo(() => {
@@ -101,6 +103,10 @@ export const GPUParticles: React.FC<GPUParticlesProps> = ({
         uHigh: { value: 0 },
         uEnergy: { value: 0 },
         uBeatIntensity: { value: 0 },
+        uDecay: { value: 0 },
+        uWaveOriginX: { value: 1 },
+        uWaveOriginY: { value: 0 },
+        uWaveTime: { value: 0 },
       },
     });
     const simMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), simMaterial);
@@ -150,14 +156,37 @@ export const GPUParticles: React.FC<GPUParticlesProps> = ({
     };
   }, [count]);
 
+  // Rising-edge trigger: fires when bass crosses above 0.5, resets when drops below
+  const threshold = 0.5;
+  const isAbove = audioFrame.bass > threshold;
+
+  if (isAbove && !triggerRef.current.wasAbove) {
+    // Just crossed above threshold - trigger a new wave
+    const angle = seededRandom(frame) * Math.PI * 2;
+    triggerRef.current = {
+      wasAbove: true,
+      originX: Math.cos(angle),
+      originY: Math.sin(angle),
+      startTime: time,
+    };
+  } else if (!isAbove) {
+    // Below threshold - reset so we can trigger again
+    triggerRef.current.wasAbove = false;
+  }
+
+  const waveTime = time - triggerRef.current.startTime;
+
   // Run simulation and update uniforms each frame
-  // This runs during render which is fine for Remotion's model
   resources.simMaterial.uniforms.uTime.value = time;
   resources.simMaterial.uniforms.uBass.value = audioFrame.bass;
   resources.simMaterial.uniforms.uMid.value = audioFrame.mid;
   resources.simMaterial.uniforms.uHigh.value = audioFrame.high;
   resources.simMaterial.uniforms.uEnergy.value = audioFrame.energy;
   resources.simMaterial.uniforms.uBeatIntensity.value = audioFrame.beatIntensity;
+  resources.simMaterial.uniforms.uDecay.value = 0; // No decay-based expansion
+  resources.simMaterial.uniforms.uWaveOriginX.value = triggerRef.current.originX;
+  resources.simMaterial.uniforms.uWaveOriginY.value = triggerRef.current.originY;
+  resources.simMaterial.uniforms.uWaveTime.value = waveTime;
 
   // Render simulation to FBO
   const currentRenderTarget = gl.getRenderTarget();
