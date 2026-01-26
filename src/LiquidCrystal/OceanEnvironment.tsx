@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
 import type { AudioFrame } from "../audio/types";
 
@@ -61,19 +61,30 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
     }));
   }, []);
 
-  // Particle shader
+  // Particle shader - z position computed on GPU
   const particleMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
       uniforms: {
         uDecay: { value: 0 },
+        uTravel: { value: 0 },
+        uLoopLength: { value: particleLoopLength },
       },
       vertexShader: `
         varying float vBrightness;
         attribute float brightness;
+        attribute float zOffset;
+
+        uniform float uTravel;
+        uniform float uLoopLength;
 
         void main() {
           vBrightness = brightness;
-          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+
+          // Compute z on GPU instead of JS loop
+          float z = mod(zOffset + uTravel, uLoopLength) - 65.0;
+          vec3 pos = vec3(position.x, position.y, z);
+
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
           gl_PointSize = 3.0 * (50.0 / -mvPosition.z);
           gl_PointSize = clamp(gl_PointSize, 1.0, 8.0);
           gl_Position = projectionMatrix * mvPosition;
@@ -102,33 +113,28 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
   }, []);
 
   particleMaterial.uniforms.uDecay.value = decay;
+  particleMaterial.uniforms.uTravel.value = travel;
 
-  // Particle geometry
+  // Particle geometry - z computed in shader, not JS
   const particleGeometry = useMemo(() => {
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(particleCount * 3);
     const brightnesses = new Float32Array(particleCount);
+    const zOffsets = new Float32Array(particleCount);
 
     particles.forEach((p, i) => {
       positions[i * 3] = p.x;
       positions[i * 3 + 1] = p.y;
-      positions[i * 3 + 2] = 0;
+      positions[i * 3 + 2] = 0; // Placeholder, computed in shader
       brightnesses[i] = p.brightness;
+      zOffsets[i] = p.zOffset;
     });
 
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute("brightness", new THREE.BufferAttribute(brightnesses, 1));
+    geometry.setAttribute("zOffset", new THREE.BufferAttribute(zOffsets, 1));
     return geometry;
   }, [particles]);
-
-  // Particles RIPPING toward the camera - uses unified throttle
-  const positionAttr = particleGeometry.attributes.position as THREE.BufferAttribute;
-  particles.forEach((p, i) => {
-    let z = ((p.zOffset + travel) % particleLoopLength);
-    z = z - 65; // Range: -65 to +15, pop happens far away
-    positionAttr.setZ(i, z);
-  });
-  positionAttr.needsUpdate = true;
 
   // Speed streaks - motion blur lines RIPPING past
   const streakCount = 80;
@@ -142,6 +148,7 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
     }));
   }, []);
 
+  // Streak material - shared across all streaks
   const streakMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
       uniforms: {
@@ -149,6 +156,7 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
       },
       vertexShader: `
         varying vec2 vUv;
+
         void main() {
           vUv = uv;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
@@ -179,6 +187,11 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
   }, []);
 
   streakMaterial.uniforms.uDecay.value = decay;
+
+  // Single shared streak geometry (unit length, scaled in shader)
+  const streakGeometry = useMemo(() => {
+    return new THREE.PlaneGeometry(0.02, 1);
+  }, []);
 
   // Ocean floor - bumpy terrain with scrolling wireframe
   const floorMaterial = useMemo(() => {
@@ -397,78 +410,84 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
   seaweedMaterial.uniforms.uTime.value = time;
   seaweedMaterial.uniforms.uDecay.value = decay;
 
+  // Quantized time for seaweed geometry updates (~20 rebuilds/sec is plenty smooth)
+  const quantizedTime = Math.floor(time * 20) / 20;
+
+  // Pre-compute seaweed geometries with memoization
+  const seaweedGeometries = useMemo(() => {
+    return seaweeds.map((weed) => {
+      const segments = 12;
+      const points: THREE.Vector3[] = [];
+      for (let j = 0; j <= segments; j++) {
+        const t = j / segments;
+        const swayPhase = quantizedTime * 1.5 + weed.phase + t * 2;
+        const sway = Math.sin(swayPhase) * 0.3 * t * t;
+        const secondarySway = Math.sin(swayPhase * 1.7 + 1) * 0.15 * t;
+        // Note: decay-based sway is handled via shader now for smoothness
+        points.push(new THREE.Vector3(
+          sway + secondarySway,
+          t * weed.height,
+          Math.sin(swayPhase * 0.8) * 0.1 * t
+        ));
+      }
+      const curve = new THREE.CatmullRomCurve3(points);
+      return new THREE.TubeGeometry(curve, 8, weed.thickness, 6, false);
+    });
+  }, [seaweeds, quantizedTime]);
+
+  // Dispose old seaweed geometries when they change
+  const prevSeaweedGeomsRef = useRef<THREE.TubeGeometry[]>([]);
+  useEffect(() => {
+    prevSeaweedGeomsRef.current.forEach(geom => geom.dispose());
+    prevSeaweedGeomsRef.current = seaweedGeometries;
+  }, [seaweedGeometries]);
+
+  // Pre-compute streak z positions (cheaper than recreating geometry)
+  const streakPositions = useMemo(() => {
+    return streaks.map((streak) => {
+      let z = ((streak.zOffset + travel) % streakLoopLength);
+      return z - 65;
+    });
+  }, [streaks, travel]);
+
+  // Compute seaweed z positions
+  const seaweedZPositions = useMemo(() => {
+    return seaweeds.map((weed) => {
+      let z = ((weed.zOffset + travel) % seaweedLoopLength);
+      return z - 80;
+    });
+  }, [seaweeds, travel]);
+
   return (
     <group>
       {/* Rushing particles */}
       <points geometry={particleGeometry} material={particleMaterial} />
 
-      {/* Speed streaks - RIPPING past along Z axis */}
-      {streaks.map((streak, i) => {
-        // Uses unified throttle via travel
-        let z = ((streak.zOffset + travel) % streakLoopLength);
-        z = z - 65; // Range: -65 to +15, pop happens far away
+      {/* Speed streaks - shared geometry, length scaled via mesh.scale.y */}
+      {streaks.map((streak, i) => (
+        <mesh
+          key={`streak-${i}`}
+          position={[streak.x, streak.y, streakPositions[i]]}
+          rotation={[Math.PI / 2, 0, 0]}
+          scale={[1, streak.length * (1 + decay * 4), 1]}
+          geometry={streakGeometry}
+        >
+          <primitive object={streakMaterial} attach="material" />
+        </mesh>
+      ))}
 
-        // Streaks elongate on beats for speed effect
-        const length = streak.length * (1 + decay * 4);
-        const sMat = streakMaterial.clone();
-        sMat.uniforms.uDecay.value = decay;
-
-        return (
-          <mesh
-            key={`streak-${i}`}
-            position={[streak.x, streak.y, z]}
-            rotation={[Math.PI / 2, 0, 0]} // Align along Z axis
-          >
-            <planeGeometry args={[0.02, length]} />
-            <primitive object={sMat} attach="material" />
-          </mesh>
-        );
-      })}
-
-      {/* Ocean floor - below the swim path */}
+      {/* Ocean floor - reduced tessellation (32×32 is plenty for noise) */}
       <mesh position={[0, -5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[60, 80, 64, 64]} />
+        <planeGeometry args={[60, 80, 32, 32]} />
         <primitive object={floorMaterial} attach="material" />
       </mesh>
 
-      {/* Seaweed strands - rooted on floor, RIPPING past */}
-      {seaweeds.map((weed, i) => {
-        // Same travel speed as floor - uses unified throttle
-        let z = ((weed.zOffset + travel) % seaweedLoopLength);
-        // Range: -80 (way up front) to +20 (way back past camera)
-        z = z - 80;
-
-        // Build curved seaweed strand
-        const segments = 12;
-        const points: THREE.Vector3[] = [];
-        for (let j = 0; j <= segments; j++) {
-          const t = j / segments;
-          const swayPhase = time * 1.5 + weed.phase + t * 2;
-          const sway = Math.sin(swayPhase) * 0.3 * t * t;
-          const secondarySway = Math.sin(swayPhase * 1.7 + 1) * 0.15 * t;
-
-          // Beat sway boost
-          const beatSway = Math.sin(swayPhase * 0.5) * decay * 0.4 * t;
-
-          points.push(new THREE.Vector3(
-            sway + secondarySway + beatSway,
-            t * weed.height,
-            Math.sin(swayPhase * 0.8) * 0.1 * t
-          ));
-        }
-
-        const curve = new THREE.CatmullRomCurve3(points);
-        const wMat = seaweedMaterial.clone();
-        wMat.uniforms.uTime.value = time;
-        wMat.uniforms.uDecay.value = decay;
-
-        return (
-          <mesh key={`weed-${i}`} position={[weed.x, -5, z]}>
-            <tubeGeometry args={[curve, 8, weed.thickness, 6, false]} />
-            <primitive object={wMat} attach="material" />
-          </mesh>
-        );
-      })}
+      {/* Seaweed strands - shared material, pre-computed geometry */}
+      {seaweedGeometries.map((geom, i) => (
+        <mesh key={`weed-${i}`} position={[seaweeds[i].x, -5, seaweedZPositions[i]]} geometry={geom}>
+          <primitive object={seaweedMaterial} attach="material" />
+        </mesh>
+      ))}
 
       {/* Ambient deep glow from below */}
       <pointLight position={[0, -8, 0]} intensity={0.4} color="#003344" distance={40} />

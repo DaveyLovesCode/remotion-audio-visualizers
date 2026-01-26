@@ -203,7 +203,7 @@ export const JellyfishCore: React.FC<JellyfishCoreProps> = ({
 
   return (
     <mesh rotation={[swimPitch + wobbleZ, wobbleY, 0]} scale={baseScale * beatPunch}>
-      <sphereGeometry args={[1, 64, 64]} />
+      <sphereGeometry args={[1, 32, 32]} />
       <primitive object={shaderMaterial} attach="material" />
     </mesh>
   );

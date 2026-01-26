@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
 import type { AudioFrame } from "../audio/types";
 
@@ -177,72 +177,72 @@ export const Tendrils: React.FC<TendrilsProps> = ({
   tendrilMaterial.uniforms.uPhase.value = phase;
   attachmentMaterial.uniforms.uDecay.value = decay;
 
+  // Pre-compute curves and geometries only when phase changes significantly
+  // Using a quantized phase to reduce geometry rebuilds while keeping smooth animation
+  const quantizedPhase = Math.floor(phase * 30) / 30; // ~30 updates per second of phase
+
+  const tendrilGeometries = useMemo(() => {
+    return tendrils.map((tendril, i) => {
+      const attachX = Math.cos(tendril.baseAngle) * tendril.radiusOffset;
+      const attachZ = Math.sin(tendril.baseAngle) * tendril.radiusOffset;
+
+      const points: THREE.Vector3[] = [];
+
+      for (let j = 0; j <= tendril.segments; j++) {
+        const t = j / tendril.segments;
+        const y = -t * tendril.length;
+
+        const swayAmount = Math.pow(t, 1.3) * 0.8;
+        const swayPhase = quantizedPhase + tendril.phaseOffset;
+        const swayX = Math.sin(swayPhase * 0.8 + t * 2.5) * swayAmount;
+        const swayZ = Math.cos(swayPhase * 0.6 + t * 2.0) * swayAmount * 0.6;
+
+        const secondaryX = Math.sin(swayPhase * 0.3 + t * 1.2 + i) * swayAmount * 0.25;
+        const secondaryZ = Math.cos(swayPhase * 0.25 + t * 1.0 + i * 0.5) * swayAmount * 0.2;
+
+        points.push(new THREE.Vector3(
+          attachX + swayX + secondaryX,
+          y,
+          attachZ + swayZ + secondaryZ
+        ));
+      }
+
+      const curve = new THREE.CatmullRomCurve3(points);
+      return {
+        attachX,
+        attachZ,
+        tubeGeom: new THREE.TubeGeometry(curve, 24, tendril.thickness * 1.5, 8, false),
+      };
+    });
+  }, [tendrils, quantizedPhase]);
+
+  // Dispose old geometries when they change
+  const prevGeometriesRef = useRef<THREE.TubeGeometry[]>([]);
+  useEffect(() => {
+    // Dispose previous geometries
+    prevGeometriesRef.current.forEach(geom => geom.dispose());
+    // Store current for next cleanup
+    prevGeometriesRef.current = tendrilGeometries.map(g => g.tubeGeom);
+  }, [tendrilGeometries]);
+
   // Tendrils trail BEHIND the jellyfish (in +Z direction)
   // Jellyfish swims in -Z, so tendrils extend toward +Z
   return (
     <group position={[0, 0, 0.3]} rotation={[-Math.PI / 2, 0, 0]}>
-      {tendrils.map((tendril, i) => {
-        // Attach points form a ring at the back of the bell
-        const attachX = Math.cos(tendril.baseAngle) * tendril.radiusOffset;
-        const attachZ = Math.sin(tendril.baseAngle) * tendril.radiusOffset;
+      {tendrilGeometries.map((geom, i) => (
+        <group key={i}>
+          {/* Attachment node */}
+          <mesh position={[geom.attachX, 0.05, geom.attachZ]} scale={0.07 + decay * 0.015}>
+            <sphereGeometry args={[1, 8, 8]} />
+            <primitive object={attachmentMaterial} attach="material" />
+          </mesh>
 
-        // Build curve points - tendrils flow backward
-        const points: THREE.Vector3[] = [];
-
-        for (let j = 0; j <= tendril.segments; j++) {
-          const t = j / tendril.segments;
-
-          const baseX = attachX;
-          const baseZ = attachZ;
-          // Tendrils extend in -Y (which becomes +Z after rotation)
-          const y = -t * tendril.length;
-
-          // Smooth sway - creates flowing motion that speeds up on beats
-          const swayAmount = Math.pow(t, 1.3) * 0.8;
-
-          const swayPhase = phase + tendril.phaseOffset;
-          const swayX = Math.sin(swayPhase * 0.8 + t * 2.5) * swayAmount;
-          const swayZ = Math.cos(swayPhase * 0.6 + t * 2.0) * swayAmount * 0.6;
-
-          // Secondary wave for organic feel
-          const secondaryX = Math.sin(swayPhase * 0.3 + t * 1.2 + i) * swayAmount * 0.25;
-          const secondaryZ = Math.cos(swayPhase * 0.25 + t * 1.0 + i * 0.5) * swayAmount * 0.2;
-
-          points.push(new THREE.Vector3(
-            baseX + swayX + secondaryX,
-            y,
-            baseZ + swayZ + secondaryZ
-          ));
-        }
-
-        const curve = new THREE.CatmullRomCurve3(points);
-
-        const baseThickness = tendril.thickness * 1.5;
-
-        const tMat = tendrilMaterial.clone();
-        tMat.uniforms.uTime.value = time;
-        tMat.uniforms.uDecay.value = decay;
-        tMat.uniforms.uPhase.value = phase;
-
-        const aMat = attachmentMaterial.clone();
-        aMat.uniforms.uDecay.value = decay;
-
-        return (
-          <group key={i}>
-            {/* Attachment node */}
-            <mesh position={[attachX, 0.05, attachZ]} scale={0.07 + decay * 0.015}>
-              <sphereGeometry args={[1, 12, 12]} />
-              <primitive object={aMat} attach="material" />
-            </mesh>
-
-            {/* Tendril tube */}
-            <mesh>
-              <tubeGeometry args={[curve, 24, baseThickness, 8, false]} />
-              <primitive object={tMat} attach="material" />
-            </mesh>
-          </group>
-        );
-      })}
+          {/* Tendril tube - shared material, geometry from memo */}
+          <mesh geometry={geom.tubeGeom}>
+            <primitive object={tendrilMaterial} attach="material" />
+          </mesh>
+        </group>
+      ))}
     </group>
   );
 };
