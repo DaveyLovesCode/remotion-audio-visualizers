@@ -47,6 +47,21 @@ export interface AudioAnalysisResult {
   isLoading: boolean;
 }
 
+export interface GateConfig {
+  /** Values below this are zeroed (noise floor) */
+  floor: number;
+  /** Values above this are clipped to 1 (default: 1) */
+  ceiling?: number;
+}
+
+/** Apply gate: values below floor → 0, remap floor-ceiling to 0-1 */
+function applyGate(value: number, gate: GateConfig): number {
+  const { floor, ceiling = 1 } = gate;
+  if (value <= floor) return 0;
+  if (value >= ceiling) return 1;
+  return (value - floor) / (ceiling - floor);
+}
+
 interface UseAudioAnalysisOptions {
   /** Path to audio file (use staticFile()) */
   src: string;
@@ -56,6 +71,8 @@ interface UseAudioAnalysisOptions {
   numberOfSamples?: number;
   /** Enable smoothing between frames */
   smoothing?: boolean;
+  /** Gate to cut noise floor and normalize range */
+  gate?: GateConfig;
 }
 
 /**
@@ -77,6 +94,7 @@ export function useAudioAnalysis({
   bands = DEFAULT_BANDS,
   numberOfSamples = 2048,
   smoothing = true,
+  gate,
 }: UseAudioAnalysisOptions): AudioAnalysisResult {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -135,7 +153,11 @@ export function useAudioAnalysis({
       // Average and normalize
       const avg = count > 0 ? sum / count : 0;
       // Boost and clamp to 0-1
-      const normalized = Math.min(1, avg * 2);
+      let normalized = Math.min(1, avg * 2);
+      // Apply gate if configured
+      if (gate) {
+        normalized = applyGate(normalized, gate);
+      }
       bandValues[name] = normalized;
       totalEnergy += normalized;
     });
@@ -144,7 +166,7 @@ export function useAudioAnalysis({
     const energy = totalEnergy / bandIndices.length;
 
     return { bands: bandValues, energy, isLoading: false };
-  }, [audioData, bandIndices, frame, fps, numberOfSamples, smoothing, bands]);
+  }, [audioData, bandIndices, frame, fps, numberOfSamples, smoothing, bands, gate]);
 
   return result;
 }

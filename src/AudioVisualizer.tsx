@@ -150,7 +150,8 @@ export const AudioVisualizer: React.FC = () => {
       { name: "high", minHz: 4000, maxHz: 12000 },
     ],
     numberOfSamples: 1024, // Faster response
-    smoothing: false, // No smoothing = more reactive to transients
+    smoothing: true,
+    gate: { floor: 0.35, ceiling: 0.7 },
   });
 
   // Convert to AudioFrame format for components
