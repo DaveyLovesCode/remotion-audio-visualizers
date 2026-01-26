@@ -178,19 +178,27 @@ export const Tendrils: React.FC<TendrilsProps> = ({
           const baseZ = attachZ;
           const y = -t * tendril.length;
 
-          // Organic sway - more movement further down the tendril
-          const swayAmount = t * t * 0.8;
-          const swaySpeed = 1.5 + mid * 2.0;
-          const swayX = Math.sin(time * swaySpeed + tendril.phaseOffset + t * 3.0) * swayAmount;
-          const swayZ = Math.cos(time * swaySpeed * 0.7 + tendril.phaseOffset + t * 2.5) * swayAmount * 0.6;
+          // WILD organic sway - exponential increase down the tendril
+          const swayAmount = Math.pow(t, 1.5) * 1.2;
+          const swaySpeed = 2.0 + mid * 3.0 + decay * 2.0; // FASTER on beats
 
-          // Beat pulse - wave traveling down
-          const pulseWave = Math.sin(t * 4.0 - time * 6.0 - decay * 3.0) * 0.1 * decay;
+          // Multiple frequencies for chaotic motion
+          const swayX = Math.sin(time * swaySpeed + tendril.phaseOffset + t * 4.0) * swayAmount
+                      + Math.sin(time * swaySpeed * 1.7 + t * 2.0) * swayAmount * 0.4;
+          const swayZ = Math.cos(time * swaySpeed * 0.8 + tendril.phaseOffset + t * 3.5) * swayAmount * 0.7
+                      + Math.cos(time * swaySpeed * 1.3 + t * 1.5) * swayAmount * 0.3;
+
+          // WHIP effect on beats - wave that accelerates down
+          const whipPhase = t * 6.0 - time * 10.0 - decay * 8.0;
+          const whipWave = Math.sin(whipPhase) * 0.3 * decay * Math.pow(t, 0.8);
+
+          // Lateral whip
+          const whipLateral = Math.cos(whipPhase * 0.7) * 0.15 * decay * t;
 
           points.push(new THREE.Vector3(
-            baseX + swayX + pulseWave,
+            baseX + swayX + whipWave + whipLateral,
             y,
-            baseZ + swayZ
+            baseZ + swayZ + whipWave * 0.5
           ));
         }
 

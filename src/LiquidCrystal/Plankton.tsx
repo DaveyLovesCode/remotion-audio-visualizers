@@ -88,46 +88,81 @@ const simulationFragmentShader = /* glsl */ `
     vec3 basePos = seed.xyz;
     float particleId = seed.w;
 
-    // Slow drift motion - like currents
-    float driftTime = uTime * 0.15;
+    // === SWIRLING VORTEX MOTION ===
+    // Particles orbit around the jellyfish, accelerating on beats
+    float orbitSpeed = 0.3 + uDecay * 1.5; // FAST on beats
+    float orbitAngle = uTime * orbitSpeed + particleId * 6.28;
+
+    // Apply rotation around Y axis (swirl)
+    float dist = length(basePos.xz);
+    float currentAngle = atan(basePos.z, basePos.x);
+    float newAngle = currentAngle + orbitAngle * (1.0 / (dist * 0.3 + 1.0)); // Closer = faster
+
+    vec3 pos;
+    pos.x = cos(newAngle) * dist;
+    pos.z = sin(newAngle) * dist;
+    pos.y = basePos.y;
+
+    // Turbulent drift
+    float driftTime = uTime * 0.3;
     vec3 drift = vec3(
-      snoise(vec3(basePos.x * 0.3, basePos.y * 0.3, driftTime)),
-      snoise(vec3(basePos.y * 0.3 + 50.0, basePos.z * 0.3, driftTime + 100.0)),
-      snoise(vec3(basePos.z * 0.3 + 100.0, basePos.x * 0.3, driftTime + 200.0))
-    ) * 0.5;
+      snoise(vec3(pos.x * 0.4, pos.y * 0.4, driftTime)) * 0.8,
+      snoise(vec3(pos.y * 0.4 + 50.0, pos.z * 0.4, driftTime + 100.0)) * 0.6,
+      snoise(vec3(pos.z * 0.4 + 100.0, pos.x * 0.4, driftTime + 200.0)) * 0.8
+    );
+    pos += drift;
 
-    vec3 pos = basePos + drift;
+    // Vertical bob - more chaotic
+    pos.y += sin(uTime * 0.8 + particleId * 10.0) * 0.4;
+    pos.y += cos(uTime * 1.2 + particleId * 7.0) * 0.2;
 
-    // Gentle upward float
-    pos.y += sin(uTime * 0.3 + particleId * 10.0) * 0.2;
+    // === GRAVITATIONAL PULL on beats ===
+    // Particles get sucked toward center during high decay
+    vec3 toCenter = -normalize(pos);
+    float pullStrength = uDecay * uDecay * 1.5;
+    float distFromCenter = length(pos);
+    // Stronger pull when closer (but not inside jellyfish)
+    float pullFactor = pullStrength / (distFromCenter * 0.5 + 0.5);
+    pos += toCenter * pullFactor * 0.5;
 
-    // Calculate bioluminescence from waves
+    // Keep minimum distance from center
+    if (length(pos) < 2.0) {
+      pos = normalize(pos) * 2.0;
+    }
+
+    // === GLOW FROM WAVES ===
     float glow = 0.0;
 
-    // Ambient shimmer - random twinkling
-    float twinkle = snoise(vec3(particleId * 100.0, uTime * 2.0, 0.0));
-    twinkle = smoothstep(0.6, 1.0, twinkle) * 0.3;
+    // Ambient shimmer - FASTER twinkling
+    float twinkle = snoise(vec3(particleId * 100.0, uTime * 4.0, uDecayPhase));
+    twinkle = smoothstep(0.5, 1.0, twinkle) * 0.4;
     glow += twinkle;
 
-    // Beat-triggered waves - spherical expansion from center
+    // Beat-triggered waves - spherical expansion
     for (int i = 0; i < 4; i++) {
       if (i >= uWaveCount) break;
 
       float waveTime = uWaveTimes[i];
-      float waveRadius = waveTime * 8.0; // Slower expansion
-      float distFromCenter = length(pos);
+      float waveRadius = waveTime * 12.0; // FASTER expansion
+      float currentDist = length(pos);
 
-      // Wave shell - glows as it passes
-      float shellDist = abs(distFromCenter - waveRadius);
-      float shellWidth = 1.5;
+      // Wave shell with longer tail
+      float shellDist = abs(currentDist - waveRadius);
+      float shellWidth = 2.5;
       float shellGlow = smoothstep(shellWidth, 0.0, shellDist);
 
-      glow += shellGlow * (1.0 - waveTime / 2.0); // Fade over time
+      // Intensity based on wave age
+      float waveIntensity = (1.0 - waveTime / 1.5);
+      waveIntensity = max(0.0, waveIntensity);
+
+      glow += shellGlow * waveIntensity * 1.5;
     }
 
-    glow = min(glow, 2.0);
+    // Extra glow during high decay (everything lights up)
+    glow += uDecay * 0.5;
 
-    // Pack position and glow
+    glow = min(glow, 2.5);
+
     gl_FragColor = vec4(pos, glow);
   }
 `;

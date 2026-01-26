@@ -10,11 +10,12 @@ import { JellyfishCore } from "./JellyfishCore";
 import { Tendrils } from "./Tendrils";
 import { Plankton } from "./Plankton";
 import { CausticOverlay } from "./CausticOverlay";
+import { HolographicUI } from "./HolographicUI";
 
 const AUDIO_SRC = staticFile("music.wav");
 
 /**
- * Camera - slow drift like floating underwater
+ * AGGRESSIVE CAMERA - punches into the jellyfish, swirls around it, gets WILD
  */
 const UnderwaterCamera: React.FC<{
   frame: number;
@@ -25,23 +26,49 @@ const UnderwaterCamera: React.FC<{
   const time = frame / fps;
 
   const decay = audioFrame.decay ?? 0;
+  const bass = audioFrame.bass;
+  const energy = audioFrame.energy;
 
-  // Slow orbital drift
-  const orbitRadius = 7 - decay * 0.5;
-  const angle = time * 0.08;
+  // Accumulated angle for orbit - accelerates on beats
+  const angleRef = useRef(0);
+  const lastTimeRef = useRef(0);
+  const deltaTime = time - lastTimeRef.current;
+  const baseSpeed = 0.12;
+  const boostSpeed = 2.5;
+  angleRef.current += (baseSpeed + decay * boostSpeed) * deltaTime;
+  lastTimeRef.current = time;
+  const angle = angleRef.current;
 
-  // Gentle sway
-  const swayX = Math.sin(time * 0.3) * 0.3;
-  const swayY = Math.sin(time * 0.23) * 0.2 + Math.cos(time * 0.17) * 0.15;
+  // AGGRESSIVE zoom - punches WAY in on beats, pulls back between
+  const baseRadius = 5;
+  const punchIn = decay * decay * 3.5; // Quadratic for PUNCH
+  const breathe = Math.sin(time * 0.5) * 0.5;
+  const orbitRadius = Math.max(2, baseRadius - punchIn + breathe);
 
-  const x = Math.sin(angle) * orbitRadius + swayX;
-  const z = Math.cos(angle) * orbitRadius;
-  const y = swayY + decay * 0.3;
+  // Vertical motion - swoops up and down
+  const verticalSwoop = Math.sin(angle * 0.4) * 1.5;
+  const beatLift = decay * 1.2;
 
-  // Look at center of jellyfish (head + tendrils), not just the head
-  const lookTarget = -0.8;
-  camera.position.set(x, y + lookTarget, z);
-  camera.lookAt(0, lookTarget, 0);
+  // SHAKE on beats - high frequency wobble
+  const shakeIntensity = decay * 0.15;
+  const shakeX = Math.sin(time * 67) * shakeIntensity;
+  const shakeY = Math.cos(time * 73) * shakeIntensity;
+  const shakeZ = Math.sin(time * 59) * shakeIntensity;
+
+  // Dutch angle - tilts harder on beats
+  const dutchAngle = Math.sin(time * 0.3) * 0.08 + decay * 0.2;
+
+  const x = Math.sin(angle) * orbitRadius + shakeX;
+  const z = Math.cos(angle) * orbitRadius + shakeZ;
+  const y = verticalSwoop + beatLift + shakeY;
+
+  // Look target shifts slightly - creates parallax feel
+  const lookY = -0.5 + Math.sin(time * 0.2) * 0.3;
+  const lookX = Math.sin(angle * 0.5) * 0.2;
+
+  camera.position.set(x, y, z);
+  camera.lookAt(lookX, lookY, 0);
+  camera.rotation.z = dutchAngle;
   camera.updateProjectionMatrix();
 
   return null;
@@ -159,6 +186,7 @@ export const LiquidCrystal: React.FC = () => {
       </ThreeCanvas>
 
       <CausticOverlay audioFrame={audioFrame} frame={frame} fps={fps} />
+      <HolographicUI audioFrame={audioFrame} frame={frame} fps={fps} />
 
       <Audio src={AUDIO_SRC} />
     </div>
