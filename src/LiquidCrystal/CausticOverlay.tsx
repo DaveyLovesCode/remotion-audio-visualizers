@@ -17,7 +17,7 @@ export const CausticOverlay: React.FC<CausticOverlayProps> = ({
   fps,
 }) => {
   const time = frame / fps;
-  const decay = audioFrame.decay ?? 0;
+  const pulse = audioFrame.pulse ?? 0;
 
   // Beat flash trigger
   const { intensity: flashIntensity } = useAudioTrigger({
@@ -33,13 +33,13 @@ export const CausticOverlay: React.FC<CausticOverlayProps> = ({
   const causticPhase1 = time * 1.5;
   const causticPhase2 = time * 1.2 + 2;
   const causticPhase3 = time * 0.8 + 4;
-  const causticScale = 1 + decay * 0.15;
+  const causticScale = 1 + pulse * 0.15;
 
   // Chromatic aberration intensity
-  const chromaIntensity = decay * 8;
+  const chromaIntensity = pulse * 8;
 
   // Pulsing vignette
-  const vignetteIntensity = 0.5 + decay * 0.3;
+  const vignetteIntensity = 0.5 + pulse * 0.3;
 
   return (
     <>
@@ -49,7 +49,7 @@ export const CausticOverlay: React.FC<CausticOverlayProps> = ({
           position: "absolute",
           inset: 0,
           pointerEvents: "none",
-          opacity: 0.2 + decay * 0.25,
+          opacity: 0.2 + pulse * 0.25,
           mixBlendMode: "screen",
           background: `
             radial-gradient(
@@ -83,7 +83,7 @@ export const CausticOverlay: React.FC<CausticOverlayProps> = ({
           position: "absolute",
           inset: 0,
           pointerEvents: "none",
-          opacity: decay * 0.4,
+          opacity: pulse * 0.4,
           mixBlendMode: "screen",
         }}
       >
@@ -121,8 +121,8 @@ export const CausticOverlay: React.FC<CausticOverlayProps> = ({
           pointerEvents: "none",
           background: `radial-gradient(
             ellipse at center,
-            transparent ${30 - decay * 10}%,
-            rgba(0, 20, 40, ${vignetteIntensity * 0.6}) ${60 - decay * 5}%,
+            transparent ${30 - pulse * 10}%,
+            rgba(0, 20, 40, ${vignetteIntensity * 0.6}) ${60 - pulse * 5}%,
             rgba(0, 10, 25, ${vignetteIntensity * 0.9}) 100%
           )`,
         }}
@@ -149,7 +149,7 @@ export const CausticOverlay: React.FC<CausticOverlayProps> = ({
           position: "absolute",
           inset: 0,
           pointerEvents: "none",
-          opacity: 0.03 + decay * 0.02,
+          opacity: 0.03 + pulse * 0.02,
           mixBlendMode: "overlay",
           backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
         }}
@@ -164,7 +164,7 @@ export const CausticOverlay: React.FC<CausticOverlayProps> = ({
           right: 0,
           height: "30%",
           pointerEvents: "none",
-          opacity: decay * 0.4,
+          opacity: pulse * 0.4,
           background: `linear-gradient(
             to bottom,
             rgba(0, 255, 200, 0.15),
@@ -182,7 +182,7 @@ export const CausticOverlay: React.FC<CausticOverlayProps> = ({
           right: 0,
           height: "40%",
           pointerEvents: "none",
-          opacity: 0.3 + decay * 0.2,
+          opacity: 0.3 + pulse * 0.2,
           background: `linear-gradient(
             to top,
             rgba(0, 50, 100, 0.4),

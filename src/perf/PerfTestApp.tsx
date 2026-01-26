@@ -85,9 +85,9 @@ function generateMockAudioFrame(time: number): AudioFrame {
  */
 const OrbitalCamera: React.FC<{
   time: number;
-  decay: number;
+  pulse: number;
   targetRef?: RefObject<THREE.Object3D | null>;
-}> = ({ time, decay, targetRef }) => {
+}> = ({ time, pulse, targetRef }) => {
   const angleRef = useRef(0);
   const lastTimeRef = useRef(0);
   const smoothedTargetRef = useRef(new THREE.Vector3(0, 0, 0));
@@ -102,7 +102,7 @@ const OrbitalCamera: React.FC<{
 
     const baseSpeed = 0.02;
     const throttleBoost = 1.2;
-    const currentSpeed = baseSpeed + decay * throttleBoost;
+    const currentSpeed = baseSpeed + pulse * throttleBoost;
 
     const deltaTime = Math.max(0, time - lastTimeRef.current);
     if (deltaTime > 0 && deltaTime < 0.1) {
@@ -133,7 +133,7 @@ const OrbitalCamera: React.FC<{
     const z = Math.cos(angle) * radius + wobbleZ;
     const y = height;
 
-    const dutchAngle = Math.sin(angle * 0.19) * 0.04 + decay * 0.03;
+    const dutchAngle = Math.sin(angle * 0.19) * 0.04 + pulse * 0.03;
 
     const target = tmpTargetRef.current;
     if (targetRef?.current) {
@@ -167,13 +167,13 @@ const Scene: React.FC<{
   audioFrame: AudioFrame;
 }> = ({ frame, fps, audioFrame }) => {
   const time = frame / fps;
-  const decay = audioFrame.decay ?? 0;
+  const pulse = audioFrame.pulse ?? 0;
   const jellyRootRef = useRef<THREE.Group | null>(null);
   const tendrilAnchorRef = useRef<THREE.Group | null>(null);
 
   return (
     <>
-      <OrbitalCamera time={time} decay={decay} targetRef={jellyRootRef} />
+      <OrbitalCamera time={time} pulse={pulse} targetRef={jellyRootRef} />
 
       {/* Lighting - matches LiquidCrystal.tsx */}
       <ambientLight intensity={0.06} color="#001828" />
@@ -198,8 +198,8 @@ export const PerfTestApp: React.FC = () => {
   const frameRef = useRef(0);
   const startTimeRef = useRef<number | null>(null);
   const prevBassRef = useRef(0);
-  const decayRef = useRef(0);
-  const decayPhaseRef = useRef(0);
+  const pulseRef = useRef(0);
+  const pulsePhaseRef = useRef(0);
 
   // Animation loop - measures actual frame render times for accurate FPS calculation
   useEffect(() => {
@@ -261,25 +261,25 @@ export const PerfTestApp: React.FC = () => {
     return () => { running = false; };
   }, []);
 
-  // Generate audio data with decay
+  // Generate audio data with pulse reactor
   const time = frame / FPS;
   const baseAudio = generateMockAudioFrame(time);
 
-  // Decay computation (matches LiquidCrystal.tsx)
+  // Pulse reactor computation (matches LiquidCrystal.tsx)
   const decayRate = 0.89;
-  const decay = Math.max(baseAudio.bass, decayRef.current * decayRate);
-  decayRef.current = decay;
+  const pulse = Math.max(baseAudio.bass, pulseRef.current * decayRate);
+  pulseRef.current = pulse;
 
   const phaseSpeed = 0.5;
-  const decayPhase = decayPhaseRef.current + decay * phaseSpeed;
-  decayPhaseRef.current = decayPhase;
+  const pulsePhase = pulsePhaseRef.current + pulse * phaseSpeed;
+  pulsePhaseRef.current = pulsePhase;
 
   prevBassRef.current = baseAudio.bass;
 
   const audioFrame: AudioFrame = {
     ...baseAudio,
-    decay,
-    decayPhase,
+    pulse,
+    pulsePhase,
   };
 
   return (

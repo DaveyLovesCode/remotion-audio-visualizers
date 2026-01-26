@@ -24,10 +24,10 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
   fps,
 }) => {
   const time = frame / fps;
-  const decay = audioFrame.decay ?? 0;
+  const pulse = audioFrame.pulse ?? 0;
 
   // THROTTLE - unified speed control
-  // decay acts as the gas pedal: high decay = RIPPING, low decay = cruising
+  // pulse acts as the gas pedal: high pulse = RIPPING, low pulse = cruising
   const travelRef = useRef(0);
   const lastTimeRef = useRef(0);
 
@@ -42,7 +42,7 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
 
   const deltaTime = Math.min(time - lastTimeRef.current, 0.1);
   if (deltaTime > 0) {
-    const throttle = baseSpeed + decay * boostSpeed;
+    const throttle = baseSpeed + pulse * boostSpeed;
     travelRef.current += throttle * deltaTime;
   }
   lastTimeRef.current = time;
@@ -112,7 +112,7 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
     });
   }, []);
 
-  particleMaterial.uniforms.uDecay.value = decay;
+  particleMaterial.uniforms.uDecay.value = pulse;
   particleMaterial.uniforms.uTravel.value = travel;
 
   // Particle geometry - z computed in shader, not JS
@@ -280,7 +280,7 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
 
   floorMaterial.uniforms.uTime.value = time;
   floorMaterial.uniforms.uTravel.value = travel;
-  floorMaterial.uniforms.uDecay.value = decay;
+  floorMaterial.uniforms.uDecay.value = pulse;
 
   // Memoized floor geometry
   const floorGeometry = useMemo(() => new THREE.PlaneGeometry(60, 80, 32, 32), []);
@@ -363,7 +363,7 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
   // Update seaweed uniforms
   seaweedMaterials.forEach((mat) => {
     mat.uniforms.uTime.value = time;
-    mat.uniforms.uDecay.value = decay;
+    mat.uniforms.uDecay.value = pulse;
   });
 
   // Static seaweed geometries

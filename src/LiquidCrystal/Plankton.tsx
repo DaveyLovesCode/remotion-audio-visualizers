@@ -372,8 +372,8 @@ export const Plankton: React.FC<PlanktonProps> = ({
 
   // Update uniforms
   resources.simMaterial.uniforms.uTime.value = time;
-  resources.simMaterial.uniforms.uDecay.value = audioFrame.decay ?? 0;
-  resources.simMaterial.uniforms.uDecayPhase.value = audioFrame.decayPhase ?? 0;
+  resources.simMaterial.uniforms.uDecay.value = audioFrame.pulse ?? 0;
+  resources.simMaterial.uniforms.uDecayPhase.value = audioFrame.pulsePhase ?? 0;
   resources.simMaterial.uniforms.uWaveTimes.value = waveTimes;
   resources.simMaterial.uniforms.uWaveCount.value = wavesRef.current.length;
 

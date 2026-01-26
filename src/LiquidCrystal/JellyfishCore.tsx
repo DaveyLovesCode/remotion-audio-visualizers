@@ -18,7 +18,7 @@ export const JellyfishCore: React.FC<JellyfishCoreProps> = ({
   fps,
 }) => {
   const time = frame / fps;
-  const decay = audioFrame.decay ?? 0;
+  const pulse = audioFrame.pulse ?? 0;
   const bass = audioFrame.bass;
 
   const shaderMaterial = useMemo(() => {
@@ -187,8 +187,8 @@ export const JellyfishCore: React.FC<JellyfishCoreProps> = ({
   }, []);
 
   shaderMaterial.uniforms.uTime.value = time;
-  shaderMaterial.uniforms.uDecay.value = decay;
-  shaderMaterial.uniforms.uDecayPhase.value = audioFrame.decayPhase ?? 0;
+  shaderMaterial.uniforms.uDecay.value = pulse;
+  shaderMaterial.uniforms.uDecayPhase.value = audioFrame.pulsePhase ?? 0;
   shaderMaterial.uniforms.uMid.value = audioFrame.mid;
   shaderMaterial.uniforms.uBass.value = bass;
   shaderMaterial.uniforms.uEnergy.value = audioFrame.energy;

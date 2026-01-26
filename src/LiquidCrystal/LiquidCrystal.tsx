@@ -4,8 +4,8 @@ import { Audio } from "@remotion/media";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useRef, useState, useEffect, type RefObject } from "react";
-import { useAudioAnalysis } from "../audio/useAudioAnalysis";
-import type { AudioFrame } from "../audio/types";
+import { useAudioAnalysis, usePulseReactor } from "../audio";
+import type { AudioFrame } from "../audio";
 import { JellyRig } from "./JellyRig";
 import { Tendrils } from "./Tendrils";
 import { OceanEnvironment } from "./OceanEnvironment";
@@ -32,7 +32,7 @@ const OrbitalCamera: React.FC<{
   const smoothedTargetRef = useRef(new THREE.Vector3(0, 0, 0));
   const tmpTargetRef = useRef(new THREE.Vector3(0, 0, 0));
 
-  const decay = audioFrame.decay ?? 0;
+  const pulse = audioFrame.pulse ?? 0;
 
   // Reset if Remotion seeks backwards
   if (time < lastTimeRef.current - 0.05) {
@@ -40,10 +40,10 @@ const OrbitalCamera: React.FC<{
     smoothedTargetRef.current.set(0, 0, 0);
   }
 
-  // Throttle: decay boosts angular velocity, naturally decays back to base
+  // Throttle: pulse boosts angular velocity, naturally decays back to base
   const baseSpeed = 0.02;
   const throttleBoost = 1.2;
-  const currentSpeed = baseSpeed + decay * throttleBoost;
+  const currentSpeed = baseSpeed + pulse * throttleBoost;
 
   const deltaTime = Math.max(0, time - lastTimeRef.current);
   if (deltaTime > 0 && deltaTime < 0.1) {
@@ -79,7 +79,7 @@ const OrbitalCamera: React.FC<{
   const y = height;
 
   // Subtle dutch angle - must rotateZ AFTER lookAt, not overwrite rotation.z
-  const dutchAngle = Math.sin(angle * 0.19) * 0.04 + decay * 0.03;
+  const dutchAngle = Math.sin(angle * 0.19) * 0.04 + pulse * 0.03;
 
   const target = tmpTargetRef.current;
   if (targetRef?.current) {
@@ -198,32 +198,32 @@ export const LiquidCrystal: React.FC = () => {
     gate: { floor: 0.35, ceiling: 0.7 },
   });
 
+  const time = frame / fps;
   const bassValue = bands.bass ?? 0;
   const prevBassRef = useRef(0);
-  const decayRef = useRef(0);
-  const decayPhaseRef = useRef(0);
+  const pulsePhaseRef = useRef(0);
   const lastFrameRef = useRef(-1);
 
   // Remotion renders frames out of order - reset temporal state if frame went backwards
   if (frame < lastFrameRef.current - 1) {
     prevBassRef.current = 0;
-    decayRef.current = 0;
-    decayPhaseRef.current = 0;
+    pulsePhaseRef.current = 0;
   }
   lastFrameRef.current = frame;
 
-  // Exact same beat detection as original
+  // Beat detection
   const isBeat = bassValue > 0.4 && bassValue > prevBassRef.current * 1.2;
   const beatIntensity = isBeat ? Math.min(1, bassValue * 1.5) : 0;
   prevBassRef.current = bassValue;
 
-  const decayRate = 0.89;
-  const decay = Math.max(bassValue, decayRef.current * decayRate);
-  decayRef.current = decay;
+  // Pulse reactor - envelope follower with decay
+  // decay=0.15 gives snappy response, higher = more cushioned
+  const pulse = usePulseReactor(bassValue, time, { decay: 0.15 });
 
+  // Accumulated phase from pulse - for evolving/rotating effects
   const phaseSpeed = 0.5;
-  const decayPhase = decayPhaseRef.current + decay * phaseSpeed;
-  decayPhaseRef.current = decayPhase;
+  const pulsePhase = pulsePhaseRef.current + pulse * phaseSpeed;
+  pulsePhaseRef.current = pulsePhase;
 
   const audioFrame: AudioFrame = {
     bass: bassValue,
@@ -234,8 +234,8 @@ export const LiquidCrystal: React.FC = () => {
     energy,
     isBeat,
     beatIntensity,
-    decay,
-    decayPhase,
+    pulse,
+    pulsePhase,
   };
 
   return (

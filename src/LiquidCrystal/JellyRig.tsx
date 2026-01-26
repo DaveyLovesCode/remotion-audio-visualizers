@@ -37,7 +37,7 @@ export const JellyRig: React.FC<JellyRigProps> = ({
   tendrilAnchorRef,
 }) => {
   const time = frame / fps;
-  const decay = audioFrame.decay ?? 0;
+  const pulse = audioFrame.pulse ?? 0;
 
   const phaseRef = useRef(0);
   const lastTimeRef = useRef(0);
@@ -56,13 +56,13 @@ export const JellyRig: React.FC<JellyRigProps> = ({
   const dt = clamp(time - lastTimeRef.current, 0, 1 / 30);
   lastTimeRef.current = time;
 
-  const phaseSpeed = 0.65 + decay * 1.1;
+  const phaseSpeed = 0.65 + pulse * 1.1;
   if (dt > 0) {
     phaseRef.current += phaseSpeed * dt;
   }
   const phase = phaseRef.current;
 
-  const lateralAmp = 0.55 + decay * 0.25;
+  const lateralAmp = 0.55 + pulse * 0.25;
   const x =
     Math.sin(phase) * lateralAmp +
     Math.sin(phase * 0.5 + 1.2) * (lateralAmp * 0.25);
@@ -74,7 +74,7 @@ export const JellyRig: React.FC<JellyRigProps> = ({
     Math.cos(phase) * lateralAmp * phaseSpeed +
     Math.cos(phase * 0.5 + 1.2) * (lateralAmp * 0.25) * 0.5 * phaseSpeed;
 
-  const forwardSpeed = 7 + decay * 14;
+  const forwardSpeed = 7 + pulse * 14;
   const desiredYaw = clamp(Math.atan2(dxdt, forwardSpeed) * 1.15, -0.22, 0.22);
 
   const leadSeconds = 0.22;
@@ -102,7 +102,7 @@ export const JellyRig: React.FC<JellyRigProps> = ({
   const rollWobble = Math.sin(time * 0.28 + 0.3) * 0.03;
 
   const baseScale = 1.3;
-  const beatPunch = 1 + decay * 0.12;
+  const beatPunch = 1 + pulse * 0.12;
 
   const bodyYaw = bodyYawRef.current.value + yawWobble * 0.25;
   const headExtraYaw = headYawRef.current.value - bodyYawRef.current.value + yawWobble * 0.55;

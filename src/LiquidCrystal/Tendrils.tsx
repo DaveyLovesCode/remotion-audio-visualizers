@@ -207,7 +207,7 @@ export const Tendrils: React.FC<TendrilsProps> = ({
   anchorRef,
 }) => {
   const time = frame / fps;
-  const decay = audioFrame.decay ?? 0;
+  const pulse = audioFrame.pulse ?? 0;
 
   // Accumulated phase - constant flow, speeds up on beats (drives shimmer)
   const phaseRef = useRef(0);
@@ -247,7 +247,7 @@ export const Tendrils: React.FC<TendrilsProps> = ({
 
   const deltaTime = Math.min(time - lastTimeRef.current, 0.1);
   if (deltaTime > 0) {
-    phaseRef.current += (baseSpeed + decay * boostSpeed) * deltaTime;
+    phaseRef.current += (baseSpeed + pulse * boostSpeed) * deltaTime;
   }
   lastTimeRef.current = time;
   const phase = phaseRef.current;
@@ -317,7 +317,7 @@ export const Tendrils: React.FC<TendrilsProps> = ({
 
   // Update uniforms (shared per frame)
   runtimes.forEach((rt) => {
-    rt.material.uniforms.uDecay.value = decay;
+    rt.material.uniforms.uDecay.value = pulse;
     rt.material.uniforms.uPhase.value = phase;
   });
 
@@ -356,7 +356,7 @@ export const Tendrils: React.FC<TendrilsProps> = ({
   const anchorDt = clamp(now - lastAnchorTimeRef.current, 0, 1 / 30);
   lastAnchorTimeRef.current = now;
 
-  const flowStrength = 1.6 + decay * 5.0;
+  const flowStrength = 1.6 + pulse * 5.0;
   const flowX = 0;
   const flowY = 0;
   const flowZ = 1;
@@ -407,7 +407,7 @@ export const Tendrils: React.FC<TendrilsProps> = ({
       const windY = -vy + flowY * flowStrength;
       const windZ = -vz + flowZ * flowStrength;
 
-      const drag = 0.06 + decay * 0.04;
+      const drag = 0.06 + pulse * 0.04;
       const dt2 = simDt * simDt;
 
       // Integrate (Verlet)
@@ -430,7 +430,7 @@ export const Tendrils: React.FC<TendrilsProps> = ({
         rt.ropePrev[idx + 2] = pz;
 
         const t = p / (pointCount - 1);
-        const windScale = (0.65 + t * 0.9) * (0.7 + decay * 0.6);
+        const windScale = (0.65 + t * 0.9) * (0.7 + pulse * 0.6);
 
         rt.ropePos[idx + 0] = px + velX + windX * windScale * dt2;
         rt.ropePos[idx + 1] = py + velY + windY * windScale * dt2;

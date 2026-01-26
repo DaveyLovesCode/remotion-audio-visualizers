@@ -62,16 +62,16 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
   fps,
 }) => {
   const time = frame / fps;
-  const decay = audioFrame.decay ?? 0;
+  const pulse = audioFrame.pulse ?? 0;
   const bass = audioFrame.bass;
 
   // Music-driven flex - panels move together as a unit, reacting to bass
-  const flexX = Math.sin(time * 0.3) * 2 + decay * 4;
-  const flexY = Math.cos(time * 0.25) * 1.5 + decay * 3;
+  const flexX = Math.sin(time * 0.3) * 2 + pulse * 4;
+  const flexY = Math.cos(time * 0.25) * 1.5 + pulse * 3;
 
   // Slight tilt for depth - also music reactive
-  const tiltX = Math.sin(time * 0.2) * 1 + decay * 2;
-  const tiltY = Math.cos(time * 0.15) * 0.8 + decay * 1.5;
+  const tiltX = Math.sin(time * 0.2) * 1 + pulse * 2;
+  const tiltY = Math.cos(time * 0.15) * 0.8 + pulse * 1.5;
 
   // Typing effect - characters revealed over time
   const typeSpeed = 8; // chars per second
@@ -91,7 +91,7 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
   const displayStatus = currentStatus.substring(0, statusChars);
 
   // Glitch effect on beats
-  const glitchActive = decay > 0.5;
+  const glitchActive = pulse > 0.5;
   const glitchOffsetX = glitchActive ? (Math.random() - 0.5) * 8 : 0;
   const glitchOffsetY = glitchActive ? (Math.random() - 0.5) * 4 : 0;
 
@@ -101,8 +101,8 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
   const depthValue = (10994 + Math.sin(time * 0.3) * 50).toFixed(0);
 
   // Shared glow color
-  const glowColor = `rgba(0, 255, 200, ${0.6 + decay * 0.4})`;
-  const glowShadow = `0 0 20px rgba(0, 255, 200, ${0.3 + decay * 0.4}), 0 0 40px rgba(0, 255, 200, ${0.1 + decay * 0.2})`;
+  const glowColor = `rgba(0, 255, 200, ${0.6 + pulse * 0.4})`;
+  const glowShadow = `0 0 20px rgba(0, 255, 200, ${0.3 + pulse * 0.4}), 0 0 40px rgba(0, 255, 200, ${0.1 + pulse * 0.2})`;
 
   return (
     <>
@@ -136,7 +136,7 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
           <line x1="0" y1="90" x2="0" y2="150" stroke={glowColor} strokeWidth="1.5" opacity="0.5" />
           <line x1="150" y1="0" x2="240" y2="0" stroke={glowColor} strokeWidth="1.5" opacity="0.3" />
           {/* Corner accent */}
-          <rect x="0" y="0" width="12" height="12" fill={glowColor} opacity={0.5 + decay * 0.5} />
+          <rect x="0" y="0" width="12" height="12" fill={glowColor} opacity={0.5 + pulse * 0.5} />
         </svg>
 
         {/* Content */}
@@ -195,7 +195,7 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
                 width: `${bass * 100}%`,
                 height: "100%",
                 background: `linear-gradient(90deg, rgba(0, 255, 200, 0.8), rgba(0, 200, 255, 0.9))`,
-                boxShadow: `0 0 15px rgba(0, 255, 200, ${0.5 + decay})`,
+                boxShadow: `0 0 15px rgba(0, 255, 200, ${0.5 + pulse})`,
                 transition: "width 0.05s",
               }} />
             </div>
@@ -230,7 +230,7 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
             style={{ filter: `drop-shadow(${glowShadow})` }}
           />
           <line x1="280" y1="90" x2="280" y2="140" stroke={glowColor} strokeWidth="1.5" opacity="0.5" />
-          <rect x="268" y="0" width="12" height="12" fill={glowColor} opacity={0.5 + decay * 0.5} />
+          <rect x="268" y="0" width="12" height="12" fill={glowColor} opacity={0.5 + pulse * 0.5} />
         </svg>
 
         <div style={{ padding: "20px 25px", fontFamily: "monospace" }}>
@@ -303,7 +303,7 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
             style={{ filter: `drop-shadow(${glowShadow})` }}
           />
           <line x1="150" y1="140" x2="240" y2="140" stroke={glowColor} strokeWidth="1.5" opacity="0.3" />
-          <rect x="0" y="128" width="12" height="12" fill={glowColor} opacity={0.5 + decay * 0.5} />
+          <rect x="0" y="128" width="12" height="12" fill={glowColor} opacity={0.5 + pulse * 0.5} />
         </svg>
 
         <div style={{ padding: "15px 25px 8px" }}>
@@ -314,8 +314,8 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
               { baseY: 25, baseAmp: 4, freq: 4, phaseOffset: 2, opacity: 0.5, width: 1.5 },
               { baseY: 25, baseAmp: 3, freq: 5, phaseOffset: 4, opacity: 0.3, width: 1 },
             ].map((wave, i) => {
-              const phase = time * 8 + wave.phaseOffset + (audioFrame.decayPhase ?? 0) * 2;
-              const amplitude = wave.baseAmp + decay * 14;
+              const phase = time * 8 + wave.phaseOffset + (audioFrame.pulsePhase ?? 0) * 2;
+              const amplitude = wave.baseAmp + pulse * 14;
 
               return (
                 <path
@@ -325,7 +325,7 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
                   stroke={`rgba(0, 255, 200, ${wave.opacity})`}
                   strokeWidth={wave.width}
                   style={{
-                    filter: decay > 0.2 ? `drop-shadow(0 0 ${4 + decay * 6}px rgba(0, 255, 200, ${0.4 + decay * 0.3}))` : "none",
+                    filter: pulse > 0.2 ? `drop-shadow(0 0 ${4 + pulse * 6}px rgba(0, 255, 200, ${0.4 + pulse * 0.3}))` : "none",
                   }}
                 />
               );
@@ -360,7 +360,7 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
             style={{ filter: `drop-shadow(${glowShadow})` }}
           />
           <line x1="280" y1="70" x2="280" y2="30" stroke={glowColor} strokeWidth="1.5" opacity="0.5" />
-          <rect x="268" y="148" width="12" height="12" fill={glowColor} opacity={0.5 + decay * 0.5} />
+          <rect x="268" y="148" width="12" height="12" fill={glowColor} opacity={0.5 + pulse * 0.5} />
         </svg>
 
         <div style={{ padding: "20px 25px 30px", fontFamily: "monospace" }}>
@@ -396,13 +396,13 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
           height: "1px",
           background: `linear-gradient(90deg,
             transparent 0%,
-            rgba(0, 255, 200, ${0.15 + decay * 0.2}) 20%,
-            rgba(0, 255, 200, ${0.25 + decay * 0.3}) 50%,
-            rgba(0, 255, 200, ${0.15 + decay * 0.2}) 80%,
+            rgba(0, 255, 200, ${0.15 + pulse * 0.2}) 20%,
+            rgba(0, 255, 200, ${0.25 + pulse * 0.3}) 50%,
+            rgba(0, 255, 200, ${0.15 + pulse * 0.2}) 80%,
             transparent 100%
           )`,
           pointerEvents: "none",
-          boxShadow: `0 0 10px rgba(0, 255, 200, ${0.2 + decay * 0.2})`,
+          boxShadow: `0 0 10px rgba(0, 255, 200, ${0.2 + pulse * 0.2})`,
         }}
       />
 
@@ -415,7 +415,7 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
             right: 0,
             top: `${20 + Math.random() * 60}%`,
             height: "2px",
-            background: `rgba(0, 255, 200, ${decay * 0.6})`,
+            background: `rgba(0, 255, 200, ${pulse * 0.6})`,
             pointerEvents: "none",
           }} />
           <div style={{
@@ -424,7 +424,7 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
             right: 0,
             top: `${20 + Math.random() * 60}%`,
             height: "1px",
-            background: `rgba(255, 0, 100, ${decay * 0.4})`,
+            background: `rgba(255, 0, 100, ${pulse * 0.4})`,
             pointerEvents: "none",
           }} />
         </>

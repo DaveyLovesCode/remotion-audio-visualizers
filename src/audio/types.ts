@@ -13,11 +13,11 @@ export interface AudioFrame {
   isBeat: boolean;
   beatIntensity: number;
 
-  // Audio-reactive driver with decay - use this for smooth cushioned reactivity
-  // Jumps up with bass, decays smoothly back down (computed at render time)
-  decay?: number;
-  // Accumulated phase from decay - use for evolving/rotating effects
-  decayPhase?: number;
+  // Pulse reactor output - smooth envelope follower with decay
+  // Computed at render time by composition, not in pre-analysis
+  pulse?: number;
+  // Accumulated phase from pulse - for evolving/rotating effects
+  pulsePhase?: number;
 }
 
 export interface AudioAnalysis {
