@@ -263,8 +263,10 @@ export const renderFragmentShader = /* glsl */ `
       color = mix(colorBright, colorHot, (waveIntensity - 1.3) / 0.7);
     }
 
-    // Depth fade - further = more transparent
-    float depthFade = smoothstep(20.0, 5.0, vDepth);
+    // Depth fade - far particles fade out, near particles fade to avoid camera clipping
+    float farFade = smoothstep(20.0, 5.0, vDepth);
+    float nearFade = smoothstep(1.0, 3.0, vDepth);
+    float depthFade = farFade * nearFade;
 
     // Base is barely visible, beat waves are INTENSE
     float alpha;

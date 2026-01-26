@@ -54,7 +54,7 @@ const CameraController: React.FC<{
 
   const orbitRadius = 8;
   const baseSpeed = 0.04; // Slower base rotation
-  const boostSpeed = 0.96; // Extra speed during beats
+  const boostSpeed = 1.35; // Extra speed during beats (+40% from 0.96)
   const verticalOscillation = 0.5;
 
   // Accumulate angle: base speed + decay-boosted speed
@@ -66,7 +66,8 @@ const CameraController: React.FC<{
   const angle = angleRef.current;
   const x = Math.sin(angle) * orbitRadius;
   const z = Math.cos(angle) * orbitRadius;
-  const y = Math.sin(time * 0.15) * verticalOscillation + 1;
+  // Vertical motion tied to same accumulated angle - unified direction
+  const y = Math.sin(angle * 0.4) * verticalOscillation + 1;
 
   camera.position.set(x, y, z);
   camera.lookAt(0, 0, 0);

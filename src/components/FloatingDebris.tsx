@@ -114,11 +114,14 @@ export const FloatingDebris: React.FC<FloatingDebrisProps> = ({
       vertexShader: `
         varying vec3 vNormal;
         varying vec3 vPosition;
+        varying float vDepth;
 
         void main() {
           vNormal = normal;
           vPosition = position;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          vDepth = -mvPosition.z;
+          gl_Position = projectionMatrix * mvPosition;
         }
       `,
       fragmentShader: `
@@ -128,6 +131,7 @@ export const FloatingDebris: React.FC<FloatingDebrisProps> = ({
 
         varying vec3 vNormal;
         varying vec3 vPosition;
+        varying float vDepth;
 
         void main() {
           // Edge glow effect
@@ -151,9 +155,12 @@ export const FloatingDebris: React.FC<FloatingDebrisProps> = ({
           color = mix(color, colorBright, uWaveOpacity * 0.8);
           color *= 0.5 + uEnergy * 0.5;
 
+          // Near-camera fade to avoid clipping artifacts
+          float nearFade = smoothstep(1.5, 4.0, vDepth);
+
           // Base alpha + wave boost
           float baseAlpha = 0.25 + edge * 0.3;
-          float alpha = baseAlpha + uWaveOpacity * 0.6;
+          float alpha = (baseAlpha + uWaveOpacity * 0.6) * nearFade;
 
           gl_FragColor = vec4(color, alpha);
         }
