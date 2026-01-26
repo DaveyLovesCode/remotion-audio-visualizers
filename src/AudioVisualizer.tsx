@@ -13,9 +13,33 @@ import {
 } from "./components";
 import { useAudioAnalysis } from "./audio/useAudioAnalysis";
 import type { AudioFrame } from "./audio/types";
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 
 const AUDIO_SRC = staticFile("music.wav");
+
+/**
+ * Shown when no audio file is found in public/
+ */
+const MissingAudioMessage: React.FC = () => (
+  <div
+    style={{
+      width: "100%",
+      height: "100%",
+      backgroundColor: "#0a0a0f",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontFamily: "system-ui, -apple-system, sans-serif",
+    }}
+  >
+    <div style={{ textAlign: "center", color: "#fff", padding: 40 }}>
+      <div style={{ fontSize: 48, marginBottom: 24 }}>No Audio File Found</div>
+      <div style={{ fontSize: 20, color: "#888", lineHeight: 1.6 }}>
+        Add a file named <code style={{ color: "#0ff", background: "#1a1a2e", padding: "2px 8px", borderRadius: 4 }}>music.wav</code> to the <code style={{ color: "#0ff", background: "#1a1a2e", padding: "2px 8px", borderRadius: 4 }}>public/</code> folder
+      </div>
+    </div>
+  </div>
+);
 
 /**
  * Camera controller - orbits around the center with subtle movements
@@ -102,6 +126,17 @@ const Scene: React.FC<{
 export const AudioVisualizer: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
+  const [audioExists, setAudioExists] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch(AUDIO_SRC, { method: "HEAD" })
+      .then((res) => setAudioExists(res.ok))
+      .catch(() => setAudioExists(false));
+  }, []);
+
+  if (audioExists === false) {
+    return <MissingAudioMessage />;
+  }
 
   // Real audio frequency extraction
   const { bands, energy, isLoading } = useAudioAnalysis({
