@@ -182,24 +182,32 @@ export const LiquidCrystal: React.FC = () => {
     );
   }
 
-  // Exact same audio analysis as original AudioVisualizer
-  const { bands, energy } = useAudioAnalysis({
+  // Single FFT call - returns both averaged bands AND fill percentages
+  // EDM kick drum anatomy:
+  //   - Sub/thump: 40-80 Hz (the weight)
+  //   - Punch: 60-120 Hz (the impact)
+  //   - Body: 100-200 Hz (fullness)
+  // We target 50-120 Hz to catch the punch without too much sub rumble
+  const { bands, fill, energy } = useAudioAnalysis({
     src: AUDIO_SRC,
     bands: [
-      { name: "sub", minHz: 20, maxHz: 60 },
-      { name: "kick", minHz: 60, maxHz: 150 },
-      { name: "bass", minHz: 100, maxHz: 500 }, // Main driver
-      { name: "lowMid", minHz: 500, maxHz: 2000 },
+      { name: "kick", minHz: 50, maxHz: 120 },   // EDM kick sweet spot
+      { name: "bass", minHz: 80, maxHz: 250 },   // Bass + kick body
+      { name: "lowMid", minHz: 250, maxHz: 2000 },
       { name: "mid", minHz: 2000, maxHz: 4000 },
       { name: "high", minHz: 4000, maxHz: 12000 },
     ],
-    numberOfSamples: 1024,
-    smoothing: true,
-    gate: { floor: 0.35, ceiling: 0.7 },
+    numberOfSamples: 2048, // Higher resolution for low frequencies
+    smoothing: false,
+    gate: { floor: 0.2, ceiling: 0.6 },
+    // Fill gate: low floor to catch kicks, low ceiling so they hit 100%
+    fillGate: { floor: 0.08, ceiling: 0.35 },
   });
 
   const time = frame / fps;
-  const bassValue = bands.bass ?? 0;
+  // Use fill.kick for clean detection, boost by 2x for more intensity
+  const rawKick = fill.kick ?? 0;
+  const bassValue = Math.min(1, rawKick * 2); // 2x boost, clamped
   const prevBassRef = useRef(0);
   const pulsePhaseRef = useRef(0);
   const lastFrameRef = useRef(-1);
