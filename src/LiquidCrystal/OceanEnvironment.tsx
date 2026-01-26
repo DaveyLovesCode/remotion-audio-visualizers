@@ -381,7 +381,7 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
 
   // Seaweed strands - spread wide across the ocean floor
   const seaweedCount = 50; // Fewer for less density
-  const seaweedLoopLength = 100; // Longer loop = more spread out in Z
+  const seaweedLoopLength = 180; // Longer loop = more spread out in Z
   const seaweeds = useMemo(() => {
     return Array.from({ length: seaweedCount }, (_, i) => ({
       // Wide X spread - way off to left and right
