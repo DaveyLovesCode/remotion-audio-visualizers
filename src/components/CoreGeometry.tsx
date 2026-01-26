@@ -139,10 +139,10 @@ export const CoreGeometry: React.FC<CoreGeometryProps> = ({
 
           // Decay-driven peak displacement - peaks get taller with decay
           // Use sharpened noise so peaks are more pronounced
-          float peakDisplacement = uDecay * 0.6 * (0.3 + sharpNoise * 0.7);
+          float peakDisplacement = uDecay * 0.9 * (0.3 + sharpNoise * 0.7);
 
           // Small base scale effect (reduced from before)
-          float baseDisplacement = uDecay * 0.1;
+          float baseDisplacement = uDecay * 0.15;
 
           // Mid-frequency shimmer
           float midDisplacement = uMid * 0.15 * noise2;
@@ -165,6 +165,7 @@ export const CoreGeometry: React.FC<CoreGeometryProps> = ({
         uniform float uEnergy;
         uniform float uBeatIntensity;
         uniform float uDecay;
+        uniform float uDecayPhase;
         uniform vec3 uBaseColor;
         uniform vec3 uGlowColor;
         uniform vec3 uHighlightColor;
@@ -174,25 +175,63 @@ export const CoreGeometry: React.FC<CoreGeometryProps> = ({
         varying float vDisplacement;
 
         void main() {
-          // Fresnel effect for edge glow
           vec3 viewDirection = normalize(cameraPosition - vPosition);
-          float fresnel = pow(1.0 - abs(dot(viewDirection, vNormal)), 3.0);
 
-          // Color mixing based on decay (smooth cushioned value)
-          vec3 baseColor = uBaseColor;
-          vec3 glowColor = mix(uGlowColor, uHighlightColor, uDecay);
+          // Fresnel - rim light
+          float fresnel = pow(1.0 - abs(dot(viewDirection, vNormal)), 2.5);
 
-          // Displacement coloring
-          float displaceColor = smoothstep(0.0, 0.5, vDisplacement);
+          // Continuous height gradient (not binary)
+          // This drives everything - the higher, the more glow
+          float height = vDisplacement; // Raw displacement
+          float heightNorm = smoothstep(-0.05, 0.6, height); // Normalized 0-1
+          float heightPow = pow(heightNorm, 1.5); // Emphasize the peaks more
 
-          // Final color
-          vec3 color = mix(baseColor, glowColor, fresnel + displaceColor * 0.5);
-          color += glowColor * uDecay * 0.4;
-          color += uHighlightColor * fresnel * uEnergy * 0.8;
+          // Valley detection for darkening
+          float isValley = smoothstep(0.08, 0.0, height);
 
-          // Pulsing inner glow
-          float pulse = 0.5 + 0.5 * sin(uTime * 2.0);
-          color += uGlowColor * pulse * 0.1 * (1.0 + uDecay);
+          // === COLOR GRADIENT ===
+          // Deep valleys: dark purple
+          // Mid areas: base purple
+          // Peaks: glow color
+          // Tips: bright highlight
+          vec3 valleyColor = uBaseColor * 0.25;
+          vec3 midColor = uBaseColor * 0.55;
+          vec3 peakColor = mix(uBaseColor, uGlowColor, 0.6);
+          vec3 tipColor = vec3(1.0, 0.4, 0.7); // Hot pink
+
+          // Build the gradient based on height
+          vec3 color;
+          if (heightNorm < 0.3) {
+            // Valley to mid
+            color = mix(valleyColor, midColor, heightNorm / 0.3);
+          } else if (heightNorm < 0.7) {
+            // Mid to peak glow
+            float t = (heightNorm - 0.3) / 0.4;
+            color = mix(midColor, peakColor, t);
+          } else {
+            // Peak to bright tip
+            float t = (heightNorm - 0.7) / 0.3;
+            color = mix(peakColor, tipColor, t);
+          }
+
+          // === RIM LIGHT (always on) ===
+          color += uGlowColor * fresnel * 0.35;
+
+          // === REACTIVE INTENSIFICATION (beats) ===
+          // Everything intensifies with decay, but scaled by height
+          // Valleys darken
+          color *= (1.0 - isValley * uDecay * 0.5);
+
+          // Peaks get brighter - additive glow scaled by height
+          vec3 reactiveGlow = mix(uGlowColor, uHighlightColor, heightPow);
+          color += reactiveGlow * heightPow * uDecay * 0.6;
+
+          // Tips get extra hot pink
+          float tipBoost = smoothstep(0.5, 0.8, heightNorm) * uDecay;
+          color += vec3(1.0, 0.5, 0.75) * tipBoost * 0.5;
+
+          // Fresnel intensifies on beats
+          color += uGlowColor * fresnel * uDecay * 0.2;
 
           gl_FragColor = vec4(color, 1.0);
         }
@@ -217,7 +256,7 @@ export const CoreGeometry: React.FC<CoreGeometryProps> = ({
 
   // Minimal scale effect - most reactivity is in shader peaks
   const baseScale = 1.5;
-  const beatScale = 1 + (audioFrame.decay ?? 0) * 0.05;
+  const beatScale = 1 + (audioFrame.decay ?? 0) * 0.075;
 
   return (
     <mesh
