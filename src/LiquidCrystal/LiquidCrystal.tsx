@@ -130,6 +130,15 @@ export const LiquidCrystal: React.FC = () => {
   const prevBassRef = useRef(0);
   const decayRef = useRef(0);
   const decayPhaseRef = useRef(0);
+  const lastFrameRef = useRef(-1);
+
+  // Remotion renders frames out of order - reset temporal state if frame went backwards
+  if (frame < lastFrameRef.current - 1) {
+    prevBassRef.current = 0;
+    decayRef.current = 0;
+    decayPhaseRef.current = 0;
+  }
+  lastFrameRef.current = frame;
 
   // Exact same beat detection as original
   const isBeat = bassValue > 0.4 && bassValue > prevBassRef.current * 1.2;

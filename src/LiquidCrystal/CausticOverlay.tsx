@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useAudioTrigger } from "../audio";
 import type { AudioFrame } from "../audio/types";
 
 interface CausticOverlayProps {
@@ -18,24 +18,15 @@ export const CausticOverlay: React.FC<CausticOverlayProps> = ({
 }) => {
   const time = frame / fps;
   const decay = audioFrame.decay ?? 0;
-  const bass = audioFrame.bass;
 
   // Beat flash trigger
-  const wasAboveRef = useRef(false);
-  const triggerTimeRef = useRef(-999);
+  const { intensity: flashIntensity } = useAudioTrigger({
+    value: audioFrame.bass,
+    threshold: 0.45,
+    time,
+    decayDuration: 0.12,
+  });
 
-  const threshold = 0.45;
-  const isAbove = bass > threshold;
-
-  if (isAbove && !wasAboveRef.current) {
-    triggerTimeRef.current = time;
-    wasAboveRef.current = true;
-  } else if (!isAbove) {
-    wasAboveRef.current = false;
-  }
-
-  const elapsed = time - triggerTimeRef.current;
-  const flashIntensity = Math.max(0, 1 - elapsed / 0.12); // FASTER flash
   const flashOpacity = flashIntensity * 0.25;
 
   // Caustic animation - MORE INTENSE

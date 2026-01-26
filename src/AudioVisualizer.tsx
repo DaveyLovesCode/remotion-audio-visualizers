@@ -57,10 +57,17 @@ const CameraController: React.FC<{
   const boostSpeed = 1.35; // Extra speed during beats (+40% from 0.96)
   const verticalOscillation = 0.5;
 
+  // Remotion renders frames out of order - reset if time went backwards
+  if (time < lastTimeRef.current - 0.05) {
+    angleRef.current = time * baseSpeed;
+  }
+
   // Accumulate angle: base speed + decay-boosted speed
-  const deltaTime = time - lastTimeRef.current;
+  const deltaTime = Math.max(0, time - lastTimeRef.current);
   const decay = audioFrame.decay ?? 0;
-  angleRef.current += (baseSpeed + decay * boostSpeed) * deltaTime;
+  if (deltaTime > 0 && deltaTime < 0.1) {
+    angleRef.current += (baseSpeed + decay * boostSpeed) * deltaTime;
+  }
   lastTimeRef.current = time;
 
   // Punch-in: reduce orbit radius when decay is high
@@ -155,6 +162,15 @@ export const AudioVisualizer: React.FC = () => {
   const prevBassRef = useRef(0);
   const decayRef = useRef(0);
   const decayPhaseRef = useRef(0);
+  const lastFrameRef = useRef(-1);
+
+  // Remotion renders frames out of order - reset temporal state if frame went backwards
+  if (frame < lastFrameRef.current - 1) {
+    prevBassRef.current = 0;
+    decayRef.current = 0;
+    decayPhaseRef.current = 0;
+  }
+  lastFrameRef.current = frame;
 
   // Simple beat detection: bass spike above threshold
   const isBeat = bassValue > 0.4 && bassValue > prevBassRef.current * 1.2;

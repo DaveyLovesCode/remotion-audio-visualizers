@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { useAudioTrigger } from "../audio";
 import type { AudioFrame } from "../audio/types";
 
 interface ScanLineOverlayProps {
@@ -22,15 +23,28 @@ export const ScanLineOverlay: React.FC<ScanLineOverlayProps> = ({
   const time = frame / fps;
   const decay = audioFrame.decay ?? 0;
 
+  // Beat flash using centralized trigger
+  const { intensity: flashIntensity, justTriggered } = useAudioTrigger({
+    value: audioFrame.bass,
+    threshold: 0.5,
+    time,
+    decayDuration: 0.08,
+  });
+  const flashOpacity = flashIntensity * 0.4;
+
   // Beat-triggered scan lines
   const MAX_SCANS = 3;
   const scansRef = useRef<Array<{ startTime: number; direction: number }>>([]);
-  const wasAboveRef = useRef(false);
+  const lastTimeRef = useRef(-Infinity);
 
-  const threshold = 0.5;
-  const isAbove = audioFrame.bass > threshold;
+  // Remotion renders frames out of order - reset if time went backwards
+  if (time < lastTimeRef.current - 0.05) {
+    scansRef.current = [];
+  }
+  lastTimeRef.current = time;
 
-  if (isAbove && !wasAboveRef.current) {
+  // Add scan on trigger
+  if (justTriggered) {
     scansRef.current.push({
       startTime: time,
       direction: Math.random() > 0.5 ? 1 : -1,
@@ -38,22 +52,12 @@ export const ScanLineOverlay: React.FC<ScanLineOverlayProps> = ({
     if (scansRef.current.length > MAX_SCANS) {
       scansRef.current.shift();
     }
-    wasAboveRef.current = true;
-  } else if (!isAbove) {
-    wasAboveRef.current = false;
   }
 
-  // Remove old scans
-  scansRef.current = scansRef.current.filter(s => time - s.startTime < 0.4);
-
-  // Beat flash
-  const flashTriggerRef = useRef(-999);
-  if (isAbove && !wasAboveRef.current) {
-    flashTriggerRef.current = time;
-  }
-  const flashElapsed = time - flashTriggerRef.current;
-  const flashIntensity = Math.max(0, 1 - flashElapsed / 0.08);
-  const flashOpacity = flashIntensity * 0.4;
+  // Remove old scans OR future scans (Remotion out-of-order rendering)
+  scansRef.current = scansRef.current.filter(
+    s => s.startTime <= time && time - s.startTime < 0.4
+  );
 
   return (
     <>

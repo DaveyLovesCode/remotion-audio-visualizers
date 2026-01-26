@@ -1,6 +1,7 @@
 import { useMemo, useRef, useEffect } from "react";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
+import { useAudioTrigger } from "../audio";
 import type { AudioFrame } from "../audio/types";
 
 interface PlanktonProps {
@@ -247,24 +248,33 @@ export const Plankton: React.FC<PlanktonProps> = ({
 
   const MAX_WAVES = 4;
   const wavesRef = useRef<Array<{ startTime: number }>>([]);
-  const wasAboveRef = useRef(false);
+  const lastTimeRef = useRef(-Infinity);
 
-  // Rising-edge beat detection
-  const threshold = 0.4;
-  const isAbove = audioFrame.bass > threshold;
+  // Remotion renders frames out of order - reset waves if time went backwards
+  if (time < lastTimeRef.current - 0.05) {
+    wavesRef.current = [];
+  }
+  lastTimeRef.current = time;
 
-  if (isAbove && !wasAboveRef.current) {
+  // Rising-edge beat detection using centralized hook
+  const { justTriggered } = useAudioTrigger({
+    value: audioFrame.bass,
+    threshold: 0.4,
+    time,
+    decayDuration: 2.0,
+  });
+
+  if (justTriggered) {
     wavesRef.current.push({ startTime: time });
     if (wavesRef.current.length > MAX_WAVES) {
       wavesRef.current.shift();
     }
-    wasAboveRef.current = true;
-  } else if (!isAbove) {
-    wasAboveRef.current = false;
   }
 
-  // Remove old waves
-  wavesRef.current = wavesRef.current.filter(w => time - w.startTime < 2.0);
+  // Remove old waves OR future waves (Remotion out-of-order rendering)
+  wavesRef.current = wavesRef.current.filter(
+    w => w.startTime <= time && time - w.startTime < 2.0
+  );
 
   const resources = useMemo(() => {
     const size = count;

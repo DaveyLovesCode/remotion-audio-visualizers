@@ -1,6 +1,7 @@
 import { useMemo, useEffect, useRef } from "react";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
+import { useAudioTrigger } from "../../audio";
 import type { AudioFrame } from "../../audio/types";
 import {
   simulationVertexShader,
@@ -36,7 +37,13 @@ export const GPUParticles: React.FC<GPUParticlesProps> = ({
   // Multiple concurrent waves - each kick triggers a new one, they run independently
   const MAX_WAVES = 6;
   const wavesRef = useRef<Array<{ originX: number; originY: number; startTime: number }>>([]);
-  const wasAboveRef = useRef(false);
+  const lastTimeRef = useRef(-Infinity);
+
+  // Remotion renders frames out of order - reset waves if time went backwards
+  if (time < lastTimeRef.current - 0.05) {
+    wavesRef.current = [];
+  }
+  lastTimeRef.current = time;
 
   // Create all GPU resources once
   const resources = useMemo(() => {
@@ -160,11 +167,15 @@ export const GPUParticles: React.FC<GPUParticlesProps> = ({
     };
   }, [count]);
 
-  // Rising-edge trigger: fires when bass crosses above 0.5
-  const threshold = 0.5;
-  const isAbove = audioFrame.bass > threshold;
+  // Rising-edge trigger using centralized hook
+  const { justTriggered } = useAudioTrigger({
+    value: audioFrame.bass,
+    threshold: 0.5,
+    time,
+    decayDuration: 1.5, // Max wave age
+  });
 
-  if (isAbove && !wasAboveRef.current) {
+  if (justTriggered) {
     // Just crossed above threshold - add a new wave
     const angle = seededRandom(frame) * Math.PI * 2;
     wavesRef.current.push({
@@ -176,13 +187,12 @@ export const GPUParticles: React.FC<GPUParticlesProps> = ({
     if (wavesRef.current.length > MAX_WAVES) {
       wavesRef.current.shift();
     }
-    wasAboveRef.current = true;
-  } else if (!isAbove) {
-    wasAboveRef.current = false;
   }
 
-  // Remove waves that are too old (> 1.5 seconds)
-  wavesRef.current = wavesRef.current.filter(w => time - w.startTime < 1.5);
+  // Remove waves that are too old OR from the future (Remotion out-of-order rendering)
+  wavesRef.current = wavesRef.current.filter(
+    w => w.startTime <= time && time - w.startTime < 1.5
+  );
 
   // Pack wave data into arrays for shader
   const waveOrigins = new Float32Array(12);

@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useAudioTrigger } from "../audio";
 import type { AudioFrame } from "../audio/types";
 
 interface BeatFlashProps {
@@ -12,24 +12,14 @@ interface BeatFlashProps {
  */
 export const BeatFlash: React.FC<BeatFlashProps> = ({ audioFrame, frame, fps }) => {
   const time = frame / fps;
-  const wasAboveRef = useRef(false);
-  const triggerTimeRef = useRef(-999);
 
-  // Rising-edge trigger
-  const threshold = 0.5;
-  const isAbove = audioFrame.bass > threshold;
+  const { intensity } = useAudioTrigger({
+    value: audioFrame.bass,
+    threshold: 0.5,
+    time,
+    decayDuration: 0.15,
+  });
 
-  if (isAbove && !wasAboveRef.current) {
-    triggerTimeRef.current = time;
-    wasAboveRef.current = true;
-  } else if (!isAbove) {
-    wasAboveRef.current = false;
-  }
-
-  // Mild decay from trigger
-  const elapsed = time - triggerTimeRef.current;
-  const decayDuration = 0.15; // seconds
-  const intensity = Math.max(0, 1 - elapsed / decayDuration);
   const opacity = intensity * 0.35;
 
   return (

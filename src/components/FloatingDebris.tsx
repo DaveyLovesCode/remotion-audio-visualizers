@@ -1,5 +1,6 @@
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
+import { useAudioTrigger } from "../audio";
 import type { AudioFrame } from "../audio/types";
 
 interface FloatingDebrisProps {
@@ -41,13 +42,23 @@ export const FloatingDebris: React.FC<FloatingDebrisProps> = ({
   // Multiple concurrent waves
   const MAX_WAVES = 6;
   const wavesRef = useRef<Array<{ originX: number; originY: number; startTime: number }>>([]);
-  const wasAboveRef = useRef(false);
+  const lastTimeRef = useRef(-Infinity);
 
-  // Rising-edge trigger: fires when bass crosses above 0.5
-  const threshold = 0.5;
-  const isAbove = audioFrame.bass > threshold;
+  // Remotion renders frames out of order - reset waves if time went backwards
+  if (time < lastTimeRef.current - 0.05) {
+    wavesRef.current = [];
+  }
+  lastTimeRef.current = time;
 
-  if (isAbove && !wasAboveRef.current) {
+  // Rising-edge trigger using centralized hook
+  const { justTriggered } = useAudioTrigger({
+    value: audioFrame.bass,
+    threshold: 0.5,
+    time,
+    decayDuration: 1.5,
+  });
+
+  if (justTriggered) {
     const angle = seededRandom(frame + 500) * Math.PI * 2;
     wavesRef.current.push({
       originX: Math.cos(angle),
@@ -57,13 +68,12 @@ export const FloatingDebris: React.FC<FloatingDebrisProps> = ({
     if (wavesRef.current.length > MAX_WAVES) {
       wavesRef.current.shift();
     }
-    wasAboveRef.current = true;
-  } else if (!isAbove) {
-    wasAboveRef.current = false;
   }
 
-  // Remove old waves
-  wavesRef.current = wavesRef.current.filter(w => time - w.startTime < 1.5);
+  // Remove old waves OR future waves (Remotion out-of-order rendering)
+  wavesRef.current = wavesRef.current.filter(
+    w => w.startTime <= time && time - w.startTime < 1.5
+  );
 
   // Generate debris items
   const debris = useMemo<DebrisItem[]>(() => {

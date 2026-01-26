@@ -1,5 +1,6 @@
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
+import { useAudioTrigger } from "../audio";
 import type { AudioFrame } from "../audio/types";
 
 interface OrbitingShardsProps {
@@ -42,15 +43,23 @@ export const OrbitingShards: React.FC<OrbitingShardsProps> = ({
 
   // Beat tracking for fracture effect
   const fractureRef = useRef(0);
-  const wasAboveRef = useRef(false);
-  const threshold = 0.5;
-  const isAbove = audioFrame.bass > threshold;
+  const lastTimeRef = useRef(-Infinity);
 
-  if (isAbove && !wasAboveRef.current) {
+  // Remotion renders frames out of order - reset if time went backwards
+  if (time < lastTimeRef.current - 0.05) {
+    fractureRef.current = 0;
+  }
+  lastTimeRef.current = time;
+
+  const { justTriggered } = useAudioTrigger({
+    value: audioFrame.bass,
+    threshold: 0.5,
+    time,
+    decayDuration: 0.5,
+  });
+
+  if (justTriggered) {
     fractureRef.current = 1;
-    wasAboveRef.current = true;
-  } else if (!isAbove) {
-    wasAboveRef.current = false;
   }
 
   // Decay fracture

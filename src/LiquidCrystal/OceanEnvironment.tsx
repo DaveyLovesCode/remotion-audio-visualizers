@@ -338,8 +338,7 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
       x: (seededRandom(i * 37) - 0.5) * 40,
       // Spread evenly across long loop
       zOffset: (i / seaweedCount) * seaweedLoopLength + seededRandom(i * 41) * 8,
-      // Tall seaweed
-      height: 3.5 + seededRandom(i * 43) * 5.0,
+      height: 2.0 + seededRandom(i * 43) * 2.5,
       phase: seededRandom(i * 47) * Math.PI * 2,
       thickness: 0.08 + seededRandom(i * 53) * 0.1,
     }));
