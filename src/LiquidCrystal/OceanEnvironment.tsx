@@ -136,6 +136,160 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
     return geometry;
   }, [particles]);
 
+  // SPEED LINES - distributed on a sphere shell so visible from any camera angle
+  const speedLineCount = 150;
+  const speedLineLoopLength = 80;
+
+  const speedLines = useMemo(() => {
+    return Array.from({ length: speedLineCount }, (_, i) => {
+      // Distribute on sphere using fibonacci spiral for even coverage
+      const phi = Math.acos(1 - 2 * (i + 0.5) / speedLineCount);
+      const theta = Math.PI * (1 + Math.sqrt(5)) * i;
+
+      const radius = 4 + seededRandom(i * 37) * 4; // 4-8 units from center
+      const x = Math.sin(phi) * Math.cos(theta) * radius;
+      const y = Math.sin(phi) * Math.sin(theta) * radius;
+      const z = Math.cos(phi) * radius;
+
+      return {
+        x,
+        y,
+        // z becomes zOffset - the line streams from this z position
+        zOffset: ((z + 8) / 16) * speedLineLoopLength + seededRandom(i * 41) * 10,
+        length: 2.0 + seededRandom(i * 43) * 4.0,
+        brightness: 0.6 + seededRandom(i * 47) * 0.4,
+      };
+    });
+  }, []);
+
+  const speedLineMaterial = useMemo(() => {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uDecay: { value: 0 },
+        uTravel: { value: 0 },
+        uLoopLength: { value: speedLineLoopLength },
+      },
+      vertexShader: `
+        attribute float brightness;
+        attribute float zOffset;
+        attribute float lineLength;
+
+        uniform float uTravel;
+        uniform float uLoopLength;
+
+        varying float vBrightness;
+        varying float vT;
+
+        void main() {
+          vBrightness = brightness;
+          vT = uv.y;
+
+          // Same z logic as particles - always looping through visible range
+          float baseZ = mod(zOffset + uTravel, uLoopLength) - 65.0;
+          float z = baseZ + uv.y * lineLength;
+
+          vec3 pos = vec3(position.x, position.y, z);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uDecay;
+
+        varying float vBrightness;
+        varying float vT;
+
+        void main() {
+          // Fade from bright at front to dim at tail
+          float fade = 1.0 - vT * 0.7;
+
+          // ZERO at rest, only visible when audio reacts
+          float alpha = uDecay * vBrightness * fade * 0.9;
+
+          vec3 color = vec3(0.7, 0.95, 1.0);
+
+          gl_FragColor = vec4(color, alpha);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+  }, []);
+
+  speedLineMaterial.uniforms.uDecay.value = pulse;
+  speedLineMaterial.uniforms.uTravel.value = travel;
+
+  const speedLineGeometry = useMemo(() => {
+    const geometry = new THREE.BufferGeometry();
+    const verticesPerLine = 4;
+    const indicesPerLine = 6;
+
+    const positions = new Float32Array(speedLineCount * verticesPerLine * 3);
+    const uvs = new Float32Array(speedLineCount * verticesPerLine * 2);
+    const brightnesses = new Float32Array(speedLineCount * verticesPerLine);
+    const zOffsets = new Float32Array(speedLineCount * verticesPerLine);
+    const lineLengths = new Float32Array(speedLineCount * verticesPerLine);
+    const indices = new Uint16Array(speedLineCount * indicesPerLine);
+
+    const lineWidth = 0.03;
+
+    speedLines.forEach((line, i) => {
+      const vi = i * verticesPerLine;
+      const ii = i * indicesPerLine;
+
+      // Front left
+      positions[vi * 3 + 0] = line.x - lineWidth;
+      positions[vi * 3 + 1] = line.y;
+      positions[vi * 3 + 2] = 0;
+      uvs[vi * 2 + 0] = 0;
+      uvs[vi * 2 + 1] = 0;
+
+      // Front right
+      positions[(vi + 1) * 3 + 0] = line.x + lineWidth;
+      positions[(vi + 1) * 3 + 1] = line.y;
+      positions[(vi + 1) * 3 + 2] = 0;
+      uvs[(vi + 1) * 2 + 0] = 1;
+      uvs[(vi + 1) * 2 + 1] = 0;
+
+      // Back left
+      positions[(vi + 2) * 3 + 0] = line.x - lineWidth;
+      positions[(vi + 2) * 3 + 1] = line.y;
+      positions[(vi + 2) * 3 + 2] = 0;
+      uvs[(vi + 2) * 2 + 0] = 0;
+      uvs[(vi + 2) * 2 + 1] = 1;
+
+      // Back right
+      positions[(vi + 3) * 3 + 0] = line.x + lineWidth;
+      positions[(vi + 3) * 3 + 1] = line.y;
+      positions[(vi + 3) * 3 + 2] = 0;
+      uvs[(vi + 3) * 2 + 0] = 1;
+      uvs[(vi + 3) * 2 + 1] = 1;
+
+      for (let v = 0; v < 4; v++) {
+        brightnesses[vi + v] = line.brightness;
+        zOffsets[vi + v] = line.zOffset;
+        lineLengths[vi + v] = line.length;
+      }
+
+      indices[ii + 0] = vi;
+      indices[ii + 1] = vi + 2;
+      indices[ii + 2] = vi + 1;
+      indices[ii + 3] = vi + 1;
+      indices[ii + 4] = vi + 2;
+      indices[ii + 5] = vi + 3;
+    });
+
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+    geometry.setAttribute("brightness", new THREE.BufferAttribute(brightnesses, 1));
+    geometry.setAttribute("zOffset", new THREE.BufferAttribute(zOffsets, 1));
+    geometry.setAttribute("lineLength", new THREE.BufferAttribute(lineLengths, 1));
+    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+
+    return geometry;
+  }, [speedLines]);
+
   // FLOOR TILES - discrete meshes that move and loop
   const gridCellSize = 2.5;
   const tileDepth = 50;
@@ -398,6 +552,9 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
     <group>
       {/* Rushing particles */}
       <points geometry={particleGeometry} material={particleMaterial} />
+
+      {/* Speed lines - streaking motion blur */}
+      <mesh geometry={speedLineGeometry} material={speedLineMaterial} />
 
       {/* Ocean floor - tiles that move and loop */}
       {tileGeometries.map((geom, i) => {

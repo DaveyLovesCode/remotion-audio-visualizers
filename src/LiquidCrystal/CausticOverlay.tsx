@@ -143,15 +143,49 @@ export const CausticOverlay: React.FC<CausticOverlayProps> = ({
         }}
       />
 
-      {/* FILM GRAIN - Subtle texture */}
+      {/* CRT scanlines - static fine-grained TV effect */}
       <div
         style={{
           position: "absolute",
           inset: 0,
           pointerEvents: "none",
-          opacity: 0.03 + pulse * 0.02,
-          mixBlendMode: "overlay",
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
+          opacity: 0.12,
+          background: `repeating-linear-gradient(
+            0deg,
+            transparent 0px,
+            transparent 1px,
+            rgba(0, 0, 0, 0.3) 1px,
+            rgba(0, 0, 0, 0.3) 2px
+          )`,
+          backgroundSize: "100% 2px",
+        }}
+      />
+
+      {/* CRT RGB pixel grid - subtle phosphor dots */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          opacity: 0.06,
+          background: `repeating-linear-gradient(
+            90deg,
+            rgba(255, 0, 0, 0.15) 0px,
+            rgba(0, 255, 0, 0.15) 1px,
+            rgba(0, 100, 255, 0.15) 2px,
+            transparent 3px
+          )`,
+          backgroundSize: "3px 100%",
+        }}
+      />
+
+      {/* CRT vignette - darker edges like old TV */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          boxShadow: "inset 0 0 150px 40px rgba(0, 0, 0, 0.4)",
         }}
       />
 

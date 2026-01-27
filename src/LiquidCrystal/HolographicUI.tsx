@@ -336,49 +336,6 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
         </div>
       </div>
 
-      {/* Scanning line - restored to original intensity */}
-      <div
-        style={{
-          position: "absolute",
-          left: "5%",
-          right: "5%",
-          top: `${10 + ((time * 30) % 80)}%`,
-          height: "1px",
-          background: `linear-gradient(90deg,
-            transparent 0%,
-            rgba(0, 255, 200, ${0.15 + pulse * 0.2}) 20%,
-            rgba(0, 255, 200, ${0.25 + pulse * 0.3}) 50%,
-            rgba(0, 255, 200, ${0.15 + pulse * 0.2}) 80%,
-            transparent 100%
-          )`,
-          pointerEvents: "none",
-          boxShadow: `0 0 10px rgba(0, 255, 200, ${0.2 + pulse * 0.2})`,
-        }}
-      />
-
-      {/* Glitch lines on beats */}
-      {pulse > 0.5 && (
-        <>
-          <div style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            top: `${20 + Math.random() * 60}%`,
-            height: "2px",
-            background: `rgba(0, 255, 200, ${pulse * 0.6})`,
-            pointerEvents: "none",
-          }} />
-          <div style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            top: `${20 + Math.random() * 60}%`,
-            height: "1px",
-            background: `rgba(255, 0, 100, ${pulse * 0.4})`,
-            pointerEvents: "none",
-          }} />
-        </>
-      )}
     </>
   );
 };
