@@ -136,22 +136,19 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
     return geometry;
   }, [particles]);
 
-  // FLOOR TILES - discrete meshes that move and loop, like seaweed
+  // FLOOR TILES - discrete meshes that move and loop
   const gridCellSize = 2.5;
-  const tileDepth = 50; // Each tile is 50 units deep (20 cells)
+  const tileDepth = 50;
   const tileWidth = 60;
-  const numTiles = 4; // 4 tiles cycling = 200 units of coverage
+  const numTiles = 4;
   const floorLoopLength = tileDepth * numTiles;
 
-  // Hash function for terrain heights (must match across tiles for seamless edges)
   const hash2 = (x: number, z: number) => {
     const val = Math.sin(x * 127.1 + z * 311.7) * 43758.5453;
     return val - Math.floor(val);
   };
 
-  // Create bumpy geometry for a single tile
-  // Heights use modular Z so tiles loop seamlessly
-  const totalCellsZ = Math.floor(floorLoopLength / gridCellSize); // 80 cells in full loop
+  const totalCellsZ = Math.floor(floorLoopLength / gridCellSize);
 
   const createTileGeometry = useMemo(() => {
     return (tileIndex: number) => {
@@ -167,16 +164,16 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
       const positions = geometry.attributes.position;
       for (let i = 0; i < positions.count; i++) {
         const x = positions.getX(i);
-        const y = positions.getY(i); // Local Y = world Z after rotation
+        const y = positions.getY(i);
 
-        // Global Z in the tiling space
-        const globalZ = y + tileIndex * tileDepth;
+        // FIX: negate y because after -90° rotation, local y=-25 becomes front (higher world Z)
+        // This ensures edges that physically meet have matching height calculations
+        const globalZ = -y + tileIndex * tileDepth;
         const gx = x / gridCellSize;
         const gz = globalZ / gridCellSize;
 
         const cx0 = Math.floor(gx);
         const cx1 = cx0 + 1;
-        // MODULAR Z - makes tiles seamlessly loop
         const cz0 = ((Math.floor(gz) % totalCellsZ) + totalCellsZ) % totalCellsZ;
         const cz1 = (cz0 + 1) % totalCellsZ;
 
@@ -199,12 +196,10 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
     };
   }, [gridCellSize, tileDepth, tileWidth, totalCellsZ]);
 
-  // Pre-create all tile geometries (heights baked in)
   const tileGeometries = useMemo(() => {
     return Array.from({ length: numTiles }, (_, i) => createTileGeometry(i));
   }, [createTileGeometry, numTiles]);
 
-  // Per-tile materials with baked grid offset
   const tileMaterials = useMemo(() => {
     return Array.from({ length: numTiles }, (_, tileIndex) => {
       return new THREE.ShaderMaterial({
@@ -217,13 +212,12 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
           uniform float uTileOffsetZ;
 
           varying vec3 vWorldPos;
-          varying float vLocalZ; // Local Y becomes Z after rotation
+          varying float vLocalZ;
 
           void main() {
             vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
-            // Pass local Y (which is the tile's Z coordinate before rotation)
-            // Plus the tile's offset in the tiling system
-            vLocalZ = position.y + uTileOffsetZ;
+            // Match the negated y from geometry creation
+            vLocalZ = -position.y + uTileOffsetZ;
             gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
           }
         `,
@@ -239,7 +233,6 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
             float distX = abs(vWorldPos.x);
             float distFade = smoothstep(70.0, 15.0, distZ) * smoothstep(28.0, 10.0, distX);
 
-            // Grid from local coordinates - moves with the tile
             float cellX = vWorldPos.x / uGridCellSize;
             float cellZ = vLocalZ / uGridCellSize;
 
@@ -267,12 +260,12 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
           }
         `,
         transparent: true,
+        depthWrite: true, // FIX: prevents transparency sorting flicker
         side: THREE.DoubleSide,
       });
     });
   }, [gridCellSize, numTiles, tileDepth]);
 
-  // Update uniforms
   tileMaterials.forEach((mat) => {
     mat.uniforms.uDecay.value = pulse;
   });
@@ -408,9 +401,11 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
 
       {/* Ocean floor - tiles that move and loop */}
       {tileGeometries.map((geom, i) => {
-        // Each tile moves toward camera, loops back when past
         const tileBaseZ = i * tileDepth;
-        const z = ((tileBaseZ + travel) % floorLoopLength) - floorLoopLength / 2 - tileDepth / 2;
+        const z =
+          ((tileBaseZ + travel) % floorLoopLength) -
+          floorLoopLength / 2 -
+          tileDepth / 2;
         return (
           <mesh
             key={`floor-tile-${i}`}
