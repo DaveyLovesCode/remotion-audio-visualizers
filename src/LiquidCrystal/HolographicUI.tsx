@@ -15,9 +15,7 @@ function generateWavePath(
   for (let i = 1; i <= points; i++) {
     const t = i / points;
     const x = i * step;
-    // Envelope: fixed at edges, full amplitude in middle
     const envelope = Math.sin(t * Math.PI);
-    // Traveling wave: phase increases with position for left-to-right motion
     const wavePhase = phase - t * Math.PI * 2 * frequency;
     const y = centerY + Math.sin(wavePhase) * amplitude * envelope;
     path += ` L ${x.toFixed(1)} ${y.toFixed(1)}`;
@@ -32,7 +30,6 @@ interface HolographicUIProps {
   fps: number;
 }
 
-// Cyberpunk text strings that cycle
 const SYSTEM_MESSAGES = [
   "NEURAL LINK ACTIVE",
   "DEPTH SCANNER ONLINE",
@@ -44,18 +41,7 @@ const SYSTEM_MESSAGES = [
   "PULSE DETECTED",
 ];
 
-const STATUS_MESSAGES = [
-  "PROCESSING...",
-  "SCANNING AREA",
-  "ANALYZING DATA",
-  "SYNC COMPLETE",
-  "CALIBRATING",
-  "MONITORING",
-];
 
-/**
- * CYBERPUNK UI - Big corner elements, typing text, holographic vibes
- */
 export const HolographicUI: React.FC<HolographicUIProps> = ({
   audioFrame,
   frame,
@@ -63,330 +49,295 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
 }) => {
   const time = frame / fps;
   const pulse = audioFrame.pulse ?? 0;
-  const bass = audioFrame.bass;
 
-  // Music-driven flex - panels move together as a unit, reacting to bass
-  const flexX = Math.sin(time * 0.3) * 2 + pulse * 4;
-  const flexY = Math.cos(time * 0.25) * 1.5 + pulse * 3;
+  // Subtle breathing motion
+  const breathe = Math.sin(time * 0.4) * 2 + pulse * 3;
 
-  // Slight tilt for depth - also music reactive
-  const tiltX = Math.sin(time * 0.2) * 1 + pulse * 2;
-  const tiltY = Math.cos(time * 0.15) * 0.8 + pulse * 1.5;
-
-  // Typing effect - characters revealed over time
-  const typeSpeed = 8; // chars per second
+  // Typing effect for system messages
+  const typeSpeed = 8;
   const messageIndex = Math.floor(time / 4) % SYSTEM_MESSAGES.length;
-  const statusIndex = Math.floor((time + 2) / 3) % STATUS_MESSAGES.length;
-
   const currentMessage = SYSTEM_MESSAGES[messageIndex];
-  const currentStatus = STATUS_MESSAGES[statusIndex];
-
-  // How much of the message to show (cycles within each message period)
-  const messageTime = (time % 4);
+  const messageTime = time % 4;
   const charsToShow = Math.min(currentMessage.length, Math.floor(messageTime * typeSpeed));
   const displayMessage = currentMessage.substring(0, charsToShow);
 
-  const statusTime = ((time + 2) % 3);
-  const statusChars = Math.min(currentStatus.length, Math.floor(statusTime * typeSpeed));
-  const displayStatus = currentStatus.substring(0, statusChars);
-
-  // Glitch effect on beats
-  const glitchActive = pulse > 0.5;
-  const glitchOffsetX = glitchActive ? (Math.random() - 0.5) * 8 : 0;
-  const glitchOffsetY = glitchActive ? (Math.random() - 0.5) * 4 : 0;
-
   // Data values
-  const freqValue = Math.floor(bass * 999);
-  // Mariana Trench depth ~10,994m - oscillate around it
+  // Speed mirrors the camera throttle formula: baseSpeed + pulse * throttleBoost
+  const baseSpeed = 0.02;
+  const throttleBoost = 1.2;
+  const currentSpeed = baseSpeed + pulse * throttleBoost;
+  const speedDisplay = (currentSpeed * 100).toFixed(1); // Display as 2.0 - 122.0
   const depthValue = (10994 + Math.sin(time * 0.3) * 50).toFixed(0);
 
-  // Shared glow color
-  const glowColor = `rgba(0, 255, 200, ${0.6 + pulse * 0.4})`;
-  const glowShadow = `0 0 20px rgba(0, 255, 200, ${0.3 + pulse * 0.4}), 0 0 40px rgba(0, 255, 200, ${0.1 + pulse * 0.2})`;
+  // Bow dimensions - fixed width, centered
+  const bowWidth = 800;
+  const bowHeight = 12;
+
+  // Color scheme - softer cyan
+  const primaryColor = `rgba(0, 220, 180, ${0.5 + pulse * 0.3})`;
+  const dimColor = `rgba(0, 220, 180, 0.25)`;
+  const veryDimColor = `rgba(0, 220, 180, 0.12)`;
 
   return (
     <>
-      {/* TOP LEFT - Main system readout */}
+      {/* TOP BOW - fixed width, centered */}
+      <svg
+        style={{
+          position: "absolute",
+          top: 28,
+          left: "50%",
+          transform: `translateX(-50%) translateY(${breathe * 0.3}px)`,
+          overflow: "visible",
+          pointerEvents: "none",
+        }}
+        width={bowWidth}
+        height={40}
+      >
+        <path
+          d={`M 0 0 Q ${bowWidth / 2} ${bowHeight} ${bowWidth} 0`}
+          fill="none"
+          stroke={primaryColor}
+          strokeWidth="1.5"
+        />
+        {/* Secondary parallel bow */}
+        <path
+          d={`M ${bowWidth * 0.15} -8 Q ${bowWidth / 2} ${bowHeight * 0.6 - 8} ${bowWidth * 0.85} -8`}
+          fill="none"
+          stroke={dimColor}
+          strokeWidth="1"
+        />
+        {/* Tick marks */}
+        {[0.1, 0.2, 0.3, 0.7, 0.8, 0.9].map((t) => {
+          const x = bowWidth * t;
+          const bowY = bowHeight * 4 * t * (1 - t);
+          return (
+            <line
+              key={t}
+              x1={x}
+              y1={bowY - 3}
+              x2={x}
+              y2={bowY + 3}
+              stroke={veryDimColor}
+              strokeWidth="1"
+            />
+          );
+        })}
+      </svg>
+
+      {/* TOP LEFT - horizontal */}
       <div
         style={{
           position: "absolute",
-          top: "2%",
-          left: "2%",
-          width: "340px",
-          transform: `
-            translate(${flexX + glitchOffsetX}px, ${flexY + glitchOffsetY}px)
-            perspective(800px)
-            rotateX(${tiltX}deg)
-            rotateY(${tiltY}deg)
-          `,
+          top: 52,
+          left: "8%",
+          fontFamily: "'JetBrains Mono', monospace",
+          transform: `translateY(${breathe * 0.5}px)`,
           pointerEvents: "none",
         }}
       >
-        {/* Corner bracket - top left */}
-        <svg width="340" height="200" style={{ position: "absolute", top: 0, left: 0 }}>
-          {/* L-shaped corner bracket */}
-          <path
-            d="M 0 80 L 0 0 L 140 0"
-            fill="none"
-            stroke={glowColor}
-            strokeWidth="3"
-            style={{ filter: `drop-shadow(${glowShadow})` }}
-          />
-          {/* Decorative lines */}
-          <line x1="0" y1="90" x2="0" y2="150" stroke={glowColor} strokeWidth="1.5" opacity="0.5" />
-          <line x1="150" y1="0" x2="240" y2="0" stroke={glowColor} strokeWidth="1.5" opacity="0.3" />
-          {/* Corner accent */}
-          <rect x="0" y="0" width="12" height="12" fill={glowColor} opacity={0.5 + pulse * 0.5} />
-        </svg>
-
-        {/* Content */}
-        <div style={{ padding: "20px 25px", fontFamily: "monospace" }}>
-          {/* Title */}
-          <div style={{
-            fontSize: "13px",
-            color: "rgba(0, 255, 200, 0.5)",
-            letterSpacing: "4px",
-            marginBottom: "10px",
-          }}>
-            SYSTEM
-          </div>
-
-          {/* Typing message - always single line */}
-          <div style={{
-            fontSize: "22px",
-            color: glowColor,
-            textShadow: glowShadow,
-            letterSpacing: "2px",
-            minHeight: "28px",
-            whiteSpace: "nowrap",
-          }}>
-            {displayMessage}
-            <span style={{ opacity: Math.sin(time * 8) > 0 ? 1 : 0 }}>_</span>
-          </div>
-
-          {/* Frequency bar */}
-          <div style={{ marginTop: "24px" }}>
-            <div style={{
-              fontSize: "12px",
-              color: "rgba(0, 255, 200, 0.4)",
-              letterSpacing: "2px",
-              marginBottom: "8px",
-            }}>
-              FREQUENCY
-            </div>
-            <div style={{
-              fontSize: "36px",
-              fontWeight: "bold",
-              color: glowColor,
-              textShadow: glowShadow,
-            }}>
-              {freqValue.toString().padStart(3, "0")}
-              <span style={{ fontSize: "18px", opacity: 0.6, marginLeft: "6px" }}>Hz</span>
-            </div>
-            {/* Bar */}
-            <div style={{
-              marginTop: "10px",
-              height: "8px",
-              background: "rgba(0, 255, 200, 0.1)",
-              borderRadius: "4px",
-              overflow: "hidden",
-            }}>
-              <div style={{
-                width: `${bass * 100}%`,
-                height: "100%",
-                background: `linear-gradient(90deg, rgba(0, 255, 200, 0.8), rgba(0, 200, 255, 0.9))`,
-                boxShadow: `0 0 15px rgba(0, 255, 200, ${0.5 + pulse})`,
-                transition: "width 0.05s",
-              }} />
-            </div>
-          </div>
+        <div style={{ fontSize: "11px", color: dimColor, letterSpacing: "3px", marginBottom: "6px" }}>
+          SYSTEM
+        </div>
+        <div style={{ fontSize: "16px", color: primaryColor, letterSpacing: "1px", whiteSpace: "nowrap" }}>
+          {displayMessage}
+          <span style={{ opacity: Math.sin(time * 8) > 0 ? 1 : 0 }}>_</span>
         </div>
       </div>
 
-      {/* TOP RIGHT - Status & depth */}
+      {/* TOP CENTER - speed display at apex of bow */}
       <div
         style={{
           position: "absolute",
-          top: "2%",
-          right: "2%",
-          width: "280px",
+          top: 48,
+          left: "50%",
+          transform: `translateX(-50%) translateY(${breathe * 0.3}px)`,
+          fontFamily: "'JetBrains Mono', monospace",
+          textAlign: "center",
+          pointerEvents: "none",
+        }}
+      >
+        <div style={{ fontSize: "28px", fontWeight: "300", color: primaryColor, letterSpacing: "2px" }}>
+          {speedDisplay}
+          <span style={{ fontSize: "12px", opacity: 0.5, marginLeft: "4px" }}>m/s</span>
+        </div>
+      </div>
+
+      {/* TOP RIGHT - full circle radial gauge */}
+      <div
+        style={{
+          position: "absolute",
+          top: 48,
+          right: "8%",
+          fontFamily: "'JetBrains Mono', monospace",
+          transform: `translateY(${breathe * 0.5}px)`,
+          pointerEvents: "none",
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+        }}
+      >
+        <div style={{ fontSize: "11px", color: dimColor, letterSpacing: "3px" }}>
+          BIOLUM
+        </div>
+        <svg width="36" height="36" style={{ overflow: "visible" }}>
+          {/* Background circle */}
+          <circle
+            cx="18"
+            cy="18"
+            r="14"
+            fill="none"
+            stroke={veryDimColor}
+            strokeWidth="2.5"
+          />
+          {/* Filled arc based on pulse - starts from top */}
+          <circle
+            cx="18"
+            cy="18"
+            r="14"
+            fill="none"
+            stroke={primaryColor}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeDasharray={`${pulse * 87.96} 87.96`}
+            transform="rotate(-90 18 18)"
+          />
+          {/* Tick marks around the circle */}
+          {[0, 0.25, 0.5, 0.75].map((t) => {
+            const angle = -Math.PI / 2 + t * Math.PI * 2;
+            const innerR = 10;
+            const outerR = 13;
+            return (
+              <line
+                key={t}
+                x1={18 + Math.cos(angle) * innerR}
+                y1={18 + Math.sin(angle) * innerR}
+                x2={18 + Math.cos(angle) * outerR}
+                y2={18 + Math.sin(angle) * outerR}
+                stroke={veryDimColor}
+                strokeWidth="1"
+              />
+            );
+          })}
+        </svg>
+      </div>
+
+      {/* BOTTOM BOW - fixed width, centered */}
+      <svg
+        style={{
+          position: "absolute",
+          bottom: 28,
+          left: "50%",
+          transform: `translateX(-50%) translateY(${-breathe * 0.3}px)`,
+          overflow: "visible",
+          pointerEvents: "none",
+        }}
+        width={bowWidth}
+        height={40}
+      >
+        <path
+          d={`M 0 40 Q ${bowWidth / 2} ${40 - bowHeight} ${bowWidth} 40`}
+          fill="none"
+          stroke={primaryColor}
+          strokeWidth="1.5"
+        />
+        {/* Secondary parallel bow */}
+        <path
+          d={`M ${bowWidth * 0.15} 48 Q ${bowWidth / 2} ${48 - bowHeight * 0.6} ${bowWidth * 0.85} 48`}
+          fill="none"
+          stroke={dimColor}
+          strokeWidth="1"
+        />
+        {/* Tick marks */}
+        {[0.1, 0.2, 0.3, 0.7, 0.8, 0.9].map((t) => {
+          const x = bowWidth * t;
+          const bowY = 40 - bowHeight * 4 * t * (1 - t);
+          return (
+            <line
+              key={t}
+              x1={x}
+              y1={bowY - 3}
+              x2={x}
+              y2={bowY + 3}
+              stroke={veryDimColor}
+              strokeWidth="1"
+            />
+          );
+        })}
+      </svg>
+
+      {/* BOTTOM LEFT - horizontal */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 52,
+          left: "8%",
+          fontFamily: "'JetBrains Mono', monospace",
+          transform: `translateY(${-breathe * 0.5}px)`,
+          pointerEvents: "none",
+        }}
+      >
+        <div style={{ fontSize: "11px", color: dimColor, letterSpacing: "3px", marginBottom: "6px" }}>
+          DEPTH
+        </div>
+        <div style={{ fontSize: "16px", color: primaryColor, letterSpacing: "1px" }}>
+          {depthValue}
+          <span style={{ fontSize: "11px", opacity: 0.5, marginLeft: "4px" }}>m</span>
+        </div>
+      </div>
+
+      {/* BOTTOM CENTER - waveform at apex */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 48,
+          left: "50%",
+          transform: `translateX(-50%) translateY(${-breathe * 0.3}px)`,
+          pointerEvents: "none",
+        }}
+      >
+        <svg width="160" height="32" style={{ overflow: "visible" }}>
+          {[
+            { baseAmp: 4, freq: 3, phaseOffset: 0, opacity: 0.8, width: 1.5 },
+            { baseAmp: 3, freq: 4, phaseOffset: 2, opacity: 0.4, width: 1 },
+          ].map((wave, i) => {
+            const phase = time * 8 + wave.phaseOffset + (audioFrame.pulsePhase ?? 0) * 2;
+            const amplitude = wave.baseAmp + pulse * 10;
+            return (
+              <path
+                key={i}
+                d={generateWavePath(160, 16, amplitude, wave.freq, phase)}
+                fill="none"
+                stroke={`rgba(0, 220, 180, ${wave.opacity})`}
+                strokeWidth={wave.width}
+              />
+            );
+          })}
+        </svg>
+      </div>
+
+      {/* BOTTOM RIGHT - horizontal */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 52,
+          right: "8%",
+          fontFamily: "'JetBrains Mono', monospace",
           textAlign: "right",
-          transform: `
-            translate(${-flexX + glitchOffsetX}px, ${flexY + glitchOffsetY}px)
-            perspective(800px)
-            rotateX(${tiltX}deg)
-            rotateY(${-tiltY}deg)
-          `,
+          transform: `translateY(${-breathe * 0.5}px)`,
           pointerEvents: "none",
         }}
       >
-        {/* Corner bracket - top right */}
-        <svg width="280" height="180" style={{ position: "absolute", top: 0, right: 0 }}>
-          <path
-            d="M 280 80 L 280 0 L 140 0"
-            fill="none"
-            stroke={glowColor}
-            strokeWidth="3"
-            style={{ filter: `drop-shadow(${glowShadow})` }}
-          />
-          <line x1="280" y1="90" x2="280" y2="140" stroke={glowColor} strokeWidth="1.5" opacity="0.5" />
-          <rect x="268" y="0" width="12" height="12" fill={glowColor} opacity={0.5 + pulse * 0.5} />
-        </svg>
-
-        <div style={{ padding: "20px 25px", fontFamily: "monospace" }}>
-          <div style={{
-            fontSize: "13px",
-            color: "rgba(0, 255, 200, 0.5)",
-            letterSpacing: "4px",
-            marginBottom: "10px",
-          }}>
-            STATUS
-          </div>
-
-          <div style={{
-            fontSize: "18px",
-            color: glowColor,
-            textShadow: glowShadow,
-            letterSpacing: "1px",
-            minHeight: "24px",
-            whiteSpace: "nowrap",
-          }}>
-            {displayStatus}
-            <span style={{ opacity: Math.sin(time * 10) > 0 ? 1 : 0 }}>_</span>
-          </div>
-
-          <div style={{ marginTop: "20px" }}>
-            <div style={{
-              fontSize: "12px",
-              color: "rgba(0, 255, 200, 0.4)",
-              letterSpacing: "2px",
-              marginBottom: "6px",
-            }}>
-              DEPTH
-            </div>
-            <div style={{
-              fontSize: "32px",
-              fontWeight: "bold",
-              color: glowColor,
-              textShadow: glowShadow,
-            }}>
-              {depthValue}
-              <span style={{ fontSize: "16px", opacity: 0.6, marginLeft: "6px" }}>m</span>
-            </div>
-          </div>
+        <div style={{ fontSize: "11px", color: dimColor, letterSpacing: "3px", marginBottom: "6px" }}>
+          COORDINATES
+        </div>
+        <div style={{ fontSize: "16px", color: primaryColor, letterSpacing: "1px" }}>
+          {(Math.sin(time * 0.2) * 100).toFixed(0)}
+          <span style={{ opacity: 0.4, margin: "0 6px" }}>/</span>
+          {(Math.cos(time * 0.15) * 100).toFixed(0)}
         </div>
       </div>
 
-      {/* BOTTOM LEFT - Spectrum analyzer */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: "2%",
-          left: "2%",
-          width: "340px",
-          transform: `
-            translate(${flexX + glitchOffsetX}px, ${-flexY + glitchOffsetY}px)
-            perspective(800px)
-            rotateX(${-tiltX}deg)
-            rotateY(${tiltY}deg)
-          `,
-          pointerEvents: "none",
-        }}
-      >
-        <svg width="340" height="140" style={{ position: "absolute", bottom: 0, left: 0 }}>
-          {/* L bracket bottom left */}
-          <path
-            d="M 0 60 L 0 140 L 140 140"
-            fill="none"
-            stroke={glowColor}
-            strokeWidth="3"
-            style={{ filter: `drop-shadow(${glowShadow})` }}
-          />
-          <line x1="150" y1="140" x2="240" y2="140" stroke={glowColor} strokeWidth="1.5" opacity="0.3" />
-          <rect x="0" y="128" width="12" height="12" fill={glowColor} opacity={0.5 + pulse * 0.5} />
-        </svg>
-
-        <div style={{ padding: "15px 25px 8px" }}>
-          <svg width="215" height="50" style={{ overflow: "visible" }}>
-            {/* Three layered sine waves driven by audio */}
-            {[
-              { baseY: 25, baseAmp: 5, freq: 3, phaseOffset: 0, opacity: 0.9, width: 2.5 },
-              { baseY: 25, baseAmp: 4, freq: 4, phaseOffset: 2, opacity: 0.5, width: 1.5 },
-              { baseY: 25, baseAmp: 3, freq: 5, phaseOffset: 4, opacity: 0.3, width: 1 },
-            ].map((wave, i) => {
-              const phase = time * 8 + wave.phaseOffset + (audioFrame.pulsePhase ?? 0) * 2;
-              const amplitude = wave.baseAmp + pulse * 14;
-
-              return (
-                <path
-                  key={i}
-                  d={generateWavePath(215, wave.baseY, amplitude, wave.freq, phase)}
-                  fill="none"
-                  stroke={`rgba(0, 255, 200, ${wave.opacity})`}
-                  strokeWidth={wave.width}
-                  style={{
-                    filter: pulse > 0.2 ? `drop-shadow(0 0 ${4 + pulse * 6}px rgba(0, 255, 200, ${0.4 + pulse * 0.3}))` : "none",
-                  }}
-                />
-              );
-            })}
-          </svg>
-        </div>
-      </div>
-
-      {/* BOTTOM RIGHT - Coordinates / tracking */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: "2%",
-          right: "2%",
-          width: "280px",
-          textAlign: "right",
-          transform: `
-            translate(${-flexX + glitchOffsetX}px, ${-flexY + glitchOffsetY}px)
-            perspective(800px)
-            rotateX(${-tiltX}deg)
-            rotateY(${-tiltY}deg)
-          `,
-          pointerEvents: "none",
-        }}
-      >
-        <svg width="280" height="160" style={{ position: "absolute", bottom: 0, right: 0 }}>
-          <path
-            d="M 280 80 L 280 160 L 140 160"
-            fill="none"
-            stroke={glowColor}
-            strokeWidth="3"
-            style={{ filter: `drop-shadow(${glowShadow})` }}
-          />
-          <line x1="280" y1="70" x2="280" y2="30" stroke={glowColor} strokeWidth="1.5" opacity="0.5" />
-          <rect x="268" y="148" width="12" height="12" fill={glowColor} opacity={0.5 + pulse * 0.5} />
-        </svg>
-
-        <div style={{ padding: "20px 25px 30px", fontFamily: "monospace" }}>
-          <div style={{
-            fontSize: "13px",
-            color: "rgba(0, 255, 200, 0.5)",
-            letterSpacing: "4px",
-            marginBottom: "12px",
-          }}>
-            COORDINATES
-          </div>
-
-          <div style={{
-            fontSize: "18px",
-            color: glowColor,
-            textShadow: glowShadow,
-            lineHeight: "1.8",
-          }}>
-            <div>X: {(Math.sin(time * 0.2) * 100).toFixed(2)}</div>
-            <div>Y: {(Math.cos(time * 0.15) * 100).toFixed(2)}</div>
-            <div>Z: {(-time * 2 % 1000).toFixed(2)}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Scanning line */}
+      {/* Scanning line - restored to original intensity */}
       <div
         style={{
           position: "absolute",
@@ -407,7 +358,7 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
       />
 
       {/* Glitch lines on beats */}
-      {glitchActive && (
+      {pulse > 0.5 && (
         <>
           <div style={{
             position: "absolute",
