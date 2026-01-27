@@ -31,9 +31,9 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
   const travelRef = useRef(0);
   const lastTimeRef = useRef(0);
 
-  // Lower base cruise, massive boost on beats
-  const baseSpeed = 4.0;
-  const boostSpeed = 35.0;
+  // Base cruise + massive boost for ripping through on beats
+  const baseSpeed = 5.0;
+  const boostSpeed = 80.0;
 
   // Detect loop/seek - if time goes backwards, reset to deterministic base
   if (time < lastTimeRef.current - 0.05) {
@@ -246,7 +246,7 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
 
             float gridIntensity = 0.6 + uDecay * 0.4;
 
-            vec3 terrainColor = vec3(0.01, 0.03, 0.05);
+            vec3 terrainColor = vec3(0.04, 0.08, 0.12);
             vec3 wireColor = vec3(0.0, 0.45, 0.55);
             vec3 wireGlow = vec3(0.1, 0.7, 0.8);
 

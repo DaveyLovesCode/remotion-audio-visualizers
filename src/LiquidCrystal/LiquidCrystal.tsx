@@ -224,8 +224,8 @@ export const LiquidCrystal: React.FC = () => {
   prevBassRef.current = bassValue;
 
   // Pulse reactor - envelope follower with decay
-  // decay=0.15 gives snappy response, higher = more cushioned
-  const pulse = usePulseReactor(bassValue, time, { decay: 0.15 });
+  // Higher decay = slower falloff, more sustained feel
+  const pulse = usePulseReactor(bassValue, time, { decay: 0.55 });
 
   // Accumulated phase from pulse - for evolving/rotating effects
   const phaseSpeed = 0.5;

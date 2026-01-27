@@ -356,7 +356,7 @@ export const Tendrils: React.FC<TendrilsProps> = ({
   const anchorDt = clamp(now - lastAnchorTimeRef.current, 0, 1 / 30);
   lastAnchorTimeRef.current = now;
 
-  const flowStrength = 1.6 + pulse * 5.0;
+  const flowStrength = 2.0 + pulse * 8.0;
   const flowX = 0;
   const flowY = 0;
   const flowZ = 1;

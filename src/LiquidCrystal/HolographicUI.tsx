@@ -61,12 +61,11 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
   const charsToShow = Math.min(currentMessage.length, Math.floor(messageTime * typeSpeed));
   const displayMessage = currentMessage.substring(0, charsToShow);
 
-  // Data values
-  // Speed mirrors the camera throttle formula: baseSpeed + pulse * throttleBoost
-  const baseSpeed = 0.02;
-  const throttleBoost = 1.2;
-  const currentSpeed = baseSpeed + pulse * throttleBoost;
-  const speedDisplay = (currentSpeed * 100).toFixed(1); // Display as 2.0 - 122.0
+  // Data values - mirrors ocean travel speed for display
+  const baseSpeed = 5.0;
+  const boostSpeed = 80.0;
+  const currentSpeed = baseSpeed + pulse * boostSpeed;
+  const speedDisplay = currentSpeed.toFixed(1);
   const depthValue = (10994 + Math.sin(time * 0.3) * 50).toFixed(0);
 
   // Bow dimensions - fixed width, centered

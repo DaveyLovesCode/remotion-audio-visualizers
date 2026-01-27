@@ -19,12 +19,12 @@ export const CausticOverlay: React.FC<CausticOverlayProps> = ({
   const time = frame / fps;
   const pulse = audioFrame.pulse ?? 0;
 
-  // Beat flash trigger
+  // Beat flash trigger - longer decay for sustained flash
   const { intensity: flashIntensity } = useAudioTrigger({
     value: audioFrame.bass,
     threshold: 0.45,
     time,
-    decayDuration: 0.12,
+    decayDuration: 0.3,
   });
 
   const flashOpacity = flashIntensity * 0.25;

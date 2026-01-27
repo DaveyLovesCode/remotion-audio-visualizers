@@ -100,8 +100,8 @@ export const JellyfishCore: React.FC<JellyfishCoreProps> = ({
           float verticalPos = position.y;
           float bellFactor = smoothstep(-1.0, 0.5, verticalPos);
 
-          // Expand outward on beats
-          float expansion = uDecay * 0.075 * bellFactor;
+          // Expand outward on beats - more pronounced
+          float expansion = uDecay * 0.12 * bellFactor;
 
           // Subtle constant undulation for life + stronger on beats
           vec3 noisePos = position * 2.0;
