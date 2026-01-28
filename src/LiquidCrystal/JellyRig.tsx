@@ -1,5 +1,6 @@
 import { useRef, type RefObject } from "react";
 import * as THREE from "three";
+import { usePulseReactor } from "../audio/reactors";
 import type { AudioFrame } from "../audio/types";
 import { RefractionDome } from "./RefractionDome";
 import { DomeRipple } from "./DomeRipple";
@@ -39,6 +40,10 @@ export const JellyRig: React.FC<JellyRigProps> = ({
 }) => {
   const time = frame / fps;
   const pulse = audioFrame.pulse ?? 0;
+
+  // Forward thrust on bass hits
+  const thrustPulse = usePulseReactor(audioFrame.bass, time, { decay: 0.65 });
+  const thrustZ = thrustPulse * -0.75;
 
   const phaseRef = useRef(0);
   const lastTimeRef = useRef(0);
@@ -114,7 +119,11 @@ export const JellyRig: React.FC<JellyRigProps> = ({
 
   return (
     <group ref={rootRef} position={[x, y, 0]}>
-      <group rotation={[pitchBase + pitchWobble, bodyYaw, bodyRoll]} scale={baseScale * beatPunch}>
+      <group
+        rotation={[pitchBase + pitchWobble, bodyYaw, bodyRoll]}
+        scale={baseScale * beatPunch}
+        position={[0, 0, thrustZ]}
+      >
         <group rotation={[0, headExtraYaw, 0]}>
           <RefractionDome frame={frame} audioFrame={audioFrame} fps={fps} />
           <DomeRipple frame={frame} audioFrame={audioFrame} fps={fps} />
