@@ -23,8 +23,8 @@ export const RefractionDome: React.FC<RefractionDomeProps> = ({
   const pulse = audioFrame.pulse ?? 0;
   const { camera, size, scene, gl } = useThree();
 
-  // FBO at 1/4 resolution - gives natural blur + massive perf win
-  const fbo = useFBO(Math.floor(size.width / 4), Math.floor(size.height / 4), {
+  // FBO at full resolution for crisp refraction
+  const fbo = useFBO(size.width, size.height, {
     minFilter: THREE.LinearFilter,
     magFilter: THREE.LinearFilter,
     format: THREE.RGBAFormat,
