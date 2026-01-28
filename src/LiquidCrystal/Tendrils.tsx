@@ -400,6 +400,13 @@ export const Tendrils: React.FC<TendrilsProps> = ({
   const flowY = 0;
   const flowZ = 1;
 
+  // Get center position for computing outward directions
+  tmpLocal.set(0, 0, 0);
+  tmpWorld.copy(tmpLocal).applyMatrix4(anchorMatrixWorld);
+  const centerX = tmpWorld.x;
+  const centerY = tmpWorld.y;
+  const centerZ = tmpWorld.z;
+
   const anchorPrev = anchorPrevRef.current;
 
   for (let i = 0; i < runtimes.length; i++) {
@@ -422,6 +429,20 @@ export const Tendrils: React.FC<TendrilsProps> = ({
     anchorPrev[a3 + 0] = ax;
     anchorPrev[a3 + 1] = ay;
     anchorPrev[a3 + 2] = az;
+
+    // Compute outward direction (perpendicular to down, pointing away from center)
+    const toCenterX = ax - centerX;
+    const toCenterY = ay - centerY;
+    const toCenterZ = az - centerZ;
+    // Remove component along down direction
+    const dotDown = toCenterX * downX + toCenterY * downY + toCenterZ * downZ;
+    let outX = toCenterX - dotDown * downX;
+    let outY = toCenterY - dotDown * downY;
+    let outZ = toCenterZ - dotDown * downZ;
+    const outLen = Math.sqrt(outX * outX + outY * outY + outZ * outZ) || 1;
+    outX /= outLen;
+    outY /= outLen;
+    outZ /= outLen;
 
     const rt = runtimes[i];
     const pointCount = rt.pointCount;
@@ -471,9 +492,17 @@ export const Tendrils: React.FC<TendrilsProps> = ({
         const t = p / (pointCount - 1);
         const windScale = (0.65 + t * 0.9) * (0.7 + pulse * 0.6);
 
-        rt.ropePos[idx + 0] = px + velX + windX * windScale * dt2;
-        rt.ropePos[idx + 1] = py + velY + windY * windScale * dt2;
-        rt.ropePos[idx + 2] = pz + velZ + windZ * windScale * dt2;
+        // Bow outward force from energy wave
+        let bowForce = 0;
+        if (waveProgress >= 0 && waveIntensity > 0) {
+          const waveDist = Math.abs(t - waveProgress);
+          const waveWidth = 0.18;
+          bowForce = Math.max(0, 1 - waveDist / waveWidth) * waveIntensity * 12.0;
+        }
+
+        rt.ropePos[idx + 0] = px + velX + windX * windScale * dt2 + outX * bowForce * dt2;
+        rt.ropePos[idx + 1] = py + velY + windY * windScale * dt2 + outY * bowForce * dt2;
+        rt.ropePos[idx + 2] = pz + velZ + windZ * windScale * dt2 + outZ * bowForce * dt2;
       }
 
       // Pin root + lightly steer early segment into the attachment frame
