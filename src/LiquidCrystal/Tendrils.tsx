@@ -492,12 +492,13 @@ export const Tendrils: React.FC<TendrilsProps> = ({
         const t = p / (pointCount - 1);
         const windScale = (0.65 + t * 0.9) * (0.7 + pulse * 0.6);
 
-        // Bow outward force from energy wave
+        // Bow outward force from energy wave (fades toward tip)
         let bowForce = 0;
         if (waveProgress >= 0 && waveIntensity > 0) {
           const waveDist = Math.abs(t - waveProgress);
           const waveWidth = 0.18;
-          bowForce = Math.max(0, 1 - waveDist / waveWidth) * waveIntensity * 12.0;
+          const tipFade = 1 - t * 0.5;
+          bowForce = Math.max(0, 1 - waveDist / waveWidth) * waveIntensity * 15.0 * tipFade;
         }
 
         rt.ropePos[idx + 0] = px + velX + windX * windScale * dt2 + outX * bowForce * dt2;
