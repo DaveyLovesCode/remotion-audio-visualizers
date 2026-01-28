@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, type RefObject } from "react";
 import * as THREE from "three";
+import { useAudioTrigger } from "../audio";
 import type { AudioFrame } from "../audio/types";
 
 interface TendrilsProps {
@@ -101,6 +102,8 @@ const createTendrilMaterial = (phaseOffset: number, index: number) => {
       uTendrilIndex: { value: index },
       uWidthRoot: { value: 0.055 },
       uWidthTip: { value: 0.012 },
+      uWaveProgress: { value: -1 },
+      uWaveIntensity: { value: 0 },
     },
     vertexShader: `
       uniform float uWidthRoot;
@@ -142,6 +145,8 @@ const createTendrilMaterial = (phaseOffset: number, index: number) => {
       uniform float uPhase;
       uniform float uPhaseOffset;
       uniform float uTendrilIndex;
+      uniform float uWaveProgress;
+      uniform float uWaveIntensity;
 
       varying float vT;
       varying vec3 vWorldPos;
@@ -156,6 +161,7 @@ const createTendrilMaterial = (phaseOffset: number, index: number) => {
         vec3 baseColor = vec3(0.0, 0.55, 0.75);
         vec3 tipColor = vec3(0.62, 0.22, 0.95);
         vec3 glowColor = vec3(0.0, 1.0, 0.85);
+        vec3 energyColor = vec3(0.3, 1.0, 0.9);
 
         vec3 color;
         if (vT < 0.1) {
@@ -175,9 +181,22 @@ const createTendrilMaterial = (phaseOffset: number, index: number) => {
 
         color += glowColor * fresnel * (0.35 + uDecay * 0.35);
 
+        // Energy wave burst - travels from root to tip
+        float waveWidth = 0.12;
+        float waveDist = abs(vT - uWaveProgress);
+        float waveCore = smoothstep(waveWidth, 0.0, waveDist);
+        float waveGlow = smoothstep(waveWidth * 2.5, 0.0, waveDist);
+
+        // Boost color and add glow rim
+        color += energyColor * waveCore * uWaveIntensity * 1.8;
+        color += energyColor * waveGlow * uWaveIntensity * 0.6 * fresnel;
+
         float baseAlpha = smoothstep(0.0, 0.12, 0.12 - vT) * 0.55;
         float bodyAlpha = (1.0 - vT * 0.65) * (0.42 + uDecay * 0.28);
         float alpha = (baseAlpha + bodyAlpha) * (0.55 + fresnel * 0.55);
+
+        // Energy wave boosts alpha
+        alpha += waveCore * uWaveIntensity * 0.4;
 
         gl_FragColor = vec4(color, alpha);
       }
@@ -199,6 +218,8 @@ const setVec3 = (arr: Float32Array, idx3: number, x: number, y: number, z: numbe
  * Tendrils - physics rope ribbons (CPU sim, GPU shaded)
  * Deterministic within a forward-ticking timeline; resets cleanly on seeks.
  */
+const WAVE_DURATION = 0.35;
+
 export const Tendrils: React.FC<TendrilsProps> = ({
   frame,
   audioFrame,
@@ -208,6 +229,20 @@ export const Tendrils: React.FC<TendrilsProps> = ({
 }) => {
   const time = frame / fps;
   const pulse = audioFrame.pulse ?? 0;
+
+  // Energy wave trigger
+  const { intensity: waveIntensity, triggerTime } = useAudioTrigger({
+    value: audioFrame.bass,
+    threshold: 0.4,
+    time,
+    decayDuration: WAVE_DURATION,
+  });
+
+  // Wave progress: 0 at root, 1 at tip
+  const timeSinceTrigger = time - triggerTime;
+  const waveProgress = timeSinceTrigger >= 0 && timeSinceTrigger < WAVE_DURATION
+    ? timeSinceTrigger / WAVE_DURATION
+    : -1;
 
   // Accumulated phase - constant flow, speeds up on beats (drives shimmer)
   const phaseRef = useRef(0);
@@ -316,9 +351,13 @@ export const Tendrils: React.FC<TendrilsProps> = ({
   }
 
   // Update uniforms (shared per frame)
-  runtimes.forEach((rt) => {
+  runtimes.forEach((rt, i) => {
     rt.material.uniforms.uDecay.value = pulse;
     rt.material.uniforms.uPhase.value = phase;
+    // Stagger wave progress per tendril for cascading effect
+    const stagger = (i / count) * 0.15;
+    rt.material.uniforms.uWaveProgress.value = waveProgress >= 0 ? waveProgress - stagger : -1;
+    rt.material.uniforms.uWaveIntensity.value = waveIntensity;
   });
 
   const anchorObj = anchorRef.current;
