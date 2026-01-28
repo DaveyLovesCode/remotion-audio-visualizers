@@ -2,6 +2,7 @@ import { useRef, type RefObject } from "react";
 import * as THREE from "three";
 import type { AudioFrame } from "../audio/types";
 import { JellyfishCore } from "./JellyfishCore";
+import { DomeRipple } from "./DomeRipple";
 
 export interface JellyRigProps {
   frame: number;
@@ -116,6 +117,7 @@ export const JellyRig: React.FC<JellyRigProps> = ({
       <group rotation={[pitchBase + pitchWobble, bodyYaw, bodyRoll]} scale={baseScale * beatPunch}>
         <group rotation={[0, headExtraYaw, 0]}>
           <JellyfishCore frame={frame} audioFrame={audioFrame} fps={fps} />
+          <DomeRipple frame={frame} audioFrame={audioFrame} fps={fps} />
           <group ref={tendrilAnchorRef} position={[0, -0.3, 0]} />
         </group>
       </group>
