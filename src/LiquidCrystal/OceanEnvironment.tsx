@@ -459,15 +459,11 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
         const baseX = (xi / (xSlots - 1)) * floorWidth - halfWidth;
         const baseZ = zi * zStep;
 
-        // Keep the central "lane" a bit clearer so the jelly reads clean
-        const centerClear =
-          Math.abs(baseX) < 6 ? 0.35 : Math.abs(baseX) < 12 ? 0.18 : 0.0;
-
         // Density varies with x and some clumping so it feels natural, not a grid
         const edgeBias = Math.min(1, Math.abs(baseX) / halfWidth);
         const clump = 0.6 + seededRandom(seed * 71) * 0.6;
         const density =
-          (0.11 + edgeBias * 0.16 + seededRandom(seed * 19) * 0.08 - centerClear) * clump;
+          (0.11 + edgeBias * 0.16 + seededRandom(seed * 19) * 0.08) * clump;
 
         if (seededRandom(seed * 17) > density) continue;
 
