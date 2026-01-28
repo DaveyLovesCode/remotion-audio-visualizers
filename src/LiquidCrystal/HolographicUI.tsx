@@ -105,22 +105,6 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
           stroke={dimColor}
           strokeWidth="1"
         />
-        {/* Tick marks */}
-        {[0.1, 0.2, 0.3, 0.7, 0.8, 0.9].map((t) => {
-          const x = bowWidth * t;
-          const bowY = bowHeight * 4 * t * (1 - t);
-          return (
-            <line
-              key={t}
-              x1={x}
-              y1={bowY - 3}
-              x2={x}
-              y2={bowY + 3}
-              stroke={veryDimColor}
-              strokeWidth="1"
-            />
-          );
-        })}
       </svg>
 
       {/* TOP LEFT - horizontal */}
@@ -200,23 +184,6 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
             strokeDasharray={`${pulse * 131.95} 131.95`}
             transform="rotate(-90 27 27)"
           />
-          {/* Tick marks around the circle */}
-          {[0, 0.25, 0.5, 0.75].map((t) => {
-            const angle = -Math.PI / 2 + t * Math.PI * 2;
-            const innerR = 15;
-            const outerR = 19.5;
-            return (
-              <line
-                key={t}
-                x1={27 + Math.cos(angle) * innerR}
-                y1={27 + Math.sin(angle) * innerR}
-                x2={27 + Math.cos(angle) * outerR}
-                y2={27 + Math.sin(angle) * outerR}
-                stroke={veryDimColor}
-                strokeWidth="1.5"
-              />
-            );
-          })}
         </svg>
       </div>
 
@@ -246,22 +213,6 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
           stroke={dimColor}
           strokeWidth="1"
         />
-        {/* Tick marks */}
-        {[0.1, 0.2, 0.3, 0.7, 0.8, 0.9].map((t) => {
-          const x = bowWidth * t;
-          const bowY = 40 - bowHeight * 4 * t * (1 - t);
-          return (
-            <line
-              key={t}
-              x1={x}
-              y1={bowY - 3}
-              x2={x}
-              y2={bowY + 3}
-              stroke={veryDimColor}
-              strokeWidth="1"
-            />
-          );
-        })}
       </svg>
 
       {/* BOTTOM LEFT - horizontal */}

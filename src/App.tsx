@@ -123,6 +123,18 @@ export const App: React.FC = () => {
     toggle();
   }, [toggle]);
 
+  // Spacebar play/pause
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        toggle();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [toggle]);
+
   return (
     <div
       style={{ width: "100%", height: "100%", backgroundColor: "#000d1a", position: "relative", cursor: "pointer" }}
