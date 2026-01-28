@@ -134,10 +134,10 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
           pointerEvents: "none",
         }}
       >
-        <div style={{ fontSize: "11px", color: dimColor, letterSpacing: "3px", marginBottom: "6px" }}>
+        <div style={{ fontSize: "17px", color: dimColor, letterSpacing: "4px", marginBottom: "9px" }}>
           SYSTEM
         </div>
-        <div style={{ fontSize: "16px", color: primaryColor, letterSpacing: "1px", whiteSpace: "nowrap" }}>
+        <div style={{ fontSize: "24px", color: primaryColor, letterSpacing: "1.5px", whiteSpace: "nowrap" }}>
           {displayMessage}
           <span style={{ opacity: Math.sin(time * 8) > 0 ? 1 : 0 }}>_</span>
         </div>
@@ -175,45 +175,45 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
           gap: "12px",
         }}
       >
-        <div style={{ fontSize: "11px", color: dimColor, letterSpacing: "3px" }}>
+        <div style={{ fontSize: "17px", color: dimColor, letterSpacing: "4px" }}>
           BIOLUM
         </div>
-        <svg width="36" height="36" style={{ overflow: "visible" }}>
+        <svg width="54" height="54" style={{ overflow: "visible" }}>
           {/* Background circle */}
           <circle
-            cx="18"
-            cy="18"
-            r="14"
+            cx="27"
+            cy="27"
+            r="21"
             fill="none"
             stroke={veryDimColor}
-            strokeWidth="2.5"
+            strokeWidth="3.75"
           />
           {/* Filled arc based on pulse - starts from top */}
           <circle
-            cx="18"
-            cy="18"
-            r="14"
+            cx="27"
+            cy="27"
+            r="21"
             fill="none"
             stroke={primaryColor}
-            strokeWidth="2.5"
+            strokeWidth="3.75"
             strokeLinecap="round"
-            strokeDasharray={`${pulse * 87.96} 87.96`}
-            transform="rotate(-90 18 18)"
+            strokeDasharray={`${pulse * 131.95} 131.95`}
+            transform="rotate(-90 27 27)"
           />
           {/* Tick marks around the circle */}
           {[0, 0.25, 0.5, 0.75].map((t) => {
             const angle = -Math.PI / 2 + t * Math.PI * 2;
-            const innerR = 10;
-            const outerR = 13;
+            const innerR = 15;
+            const outerR = 19.5;
             return (
               <line
                 key={t}
-                x1={18 + Math.cos(angle) * innerR}
-                y1={18 + Math.sin(angle) * innerR}
-                x2={18 + Math.cos(angle) * outerR}
-                y2={18 + Math.sin(angle) * outerR}
+                x1={27 + Math.cos(angle) * innerR}
+                y1={27 + Math.sin(angle) * innerR}
+                x2={27 + Math.cos(angle) * outerR}
+                y2={27 + Math.sin(angle) * outerR}
                 stroke={veryDimColor}
-                strokeWidth="1"
+                strokeWidth="1.5"
               />
             );
           })}
@@ -275,12 +275,12 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
           pointerEvents: "none",
         }}
       >
-        <div style={{ fontSize: "11px", color: dimColor, letterSpacing: "3px", marginBottom: "6px" }}>
+        <div style={{ fontSize: "17px", color: dimColor, letterSpacing: "4px", marginBottom: "9px" }}>
           DEPTH
         </div>
-        <div style={{ fontSize: "16px", color: primaryColor, letterSpacing: "1px" }}>
+        <div style={{ fontSize: "24px", color: primaryColor, letterSpacing: "1.5px" }}>
           {depthValue}
-          <span style={{ fontSize: "11px", opacity: 0.5, marginLeft: "4px" }}>m</span>
+          <span style={{ fontSize: "17px", opacity: 0.5, marginLeft: "6px" }}>m</span>
         </div>
       </div>
 
@@ -326,12 +326,12 @@ export const HolographicUI: React.FC<HolographicUIProps> = ({
           pointerEvents: "none",
         }}
       >
-        <div style={{ fontSize: "11px", color: dimColor, letterSpacing: "3px", marginBottom: "6px" }}>
+        <div style={{ fontSize: "17px", color: dimColor, letterSpacing: "4px", marginBottom: "9px" }}>
           COORDINATES
         </div>
-        <div style={{ fontSize: "16px", color: primaryColor, letterSpacing: "1px" }}>
+        <div style={{ fontSize: "24px", color: primaryColor, letterSpacing: "1.5px" }}>
           {(Math.sin(time * 0.2) * 100).toFixed(0)}
-          <span style={{ opacity: 0.4, margin: "0 6px" }}>/</span>
+          <span style={{ opacity: 0.4, margin: "0 9px" }}>/</span>
           {(Math.cos(time * 0.15) * 100).toFixed(0)}
         </div>
       </div>
