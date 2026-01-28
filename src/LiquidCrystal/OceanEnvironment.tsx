@@ -470,7 +470,10 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
         const xJitter = (seededRandom(seed * 23) - 0.5) * 0.9;
         const zJitter = (seededRandom(seed * 29) - 0.5) * 0.9;
 
-        const height = 1.2 + seededRandom(seed * 43) * 3.4;
+        // Shorter seaweed in jellyfish's path so it reads clean
+        const centerDist = Math.abs(baseX);
+        const heightScale = centerDist < 8 ? 0.4 + (centerDist / 8) * 0.6 : 1.0;
+        const height = (1.2 + seededRandom(seed * 43) * 3.4) * heightScale;
         const thickness = 0.09 + seededRandom(seed * 53) * 0.12;
 
         weeds.push({
