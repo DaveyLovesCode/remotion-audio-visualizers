@@ -34,6 +34,7 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
   // Base cruise + massive boost for ripping through on beats
   const baseSpeed = 5.0;
   const boostSpeed = 80.0;
+  const throttle = baseSpeed + pulse * boostSpeed;
 
   // Detect loop/seek - if time goes backwards, reset to deterministic base
   if (time < lastTimeRef.current - 0.05) {
@@ -42,7 +43,6 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
 
   const deltaTime = Math.min(time - lastTimeRef.current, 0.1);
   if (deltaTime > 0) {
-    const throttle = baseSpeed + pulse * boostSpeed;
     travelRef.current += throttle * deltaTime;
   }
   lastTimeRef.current = time;
@@ -424,129 +424,306 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
     mat.uniforms.uDecay.value = pulse;
   });
 
-  // Seaweed strands - positioned at grid intersections for visual coherence
-  // Grid cells are gridCellSize units wide, so place seaweed at multiples of gridCellSize
-  const seaweedLoopLength = 200; // Must be multiple of gridCellSize (200 = 80 × 2.5)
-  const xSlots = 21; // Grid columns: -25 to +25 in steps of 2.5
-  const zSlots = Math.floor(seaweedLoopLength / gridCellSize); // 80 grid rows in loop
+  // SEAWEED - instanced, hard-corner bends (low-poly), terrain-attached
+  const floorY = -5;
+  const floorWidth = 90;
+  const floorHeightScale = 0.65;
+  const seaweedLoopLength = 1320; // floorChunkDepth(220) * floorChunkCount(6)
 
-  const seaweeds = useMemo(() => {
-    const strands: {
+  const seaweedInstances = useMemo(() => {
+    const weeds: {
       x: number;
       zOffset: number;
       height: number;
-      phase: number;
       thickness: number;
+      seed: number;
+      yaw: number;
     }[] = [];
 
-    // Place seaweed at grid intersections with some randomness in which slots get filled
-    for (let xi = 0; xi < xSlots; xi++) {
-      for (let zi = 0; zi < zSlots; zi++) {
-        const seed = xi * 100 + zi;
-        // ~30% chance of seaweed at each intersection
-        if (seededRandom(seed * 17) > 0.3) continue;
+    const xStep = gridCellSize * 2;
+    const zStep = gridCellSize * 2;
+    const halfWidth = floorWidth * 0.5;
 
-        // Exact grid position
-        const x = (xi - Math.floor(xSlots / 2)) * gridCellSize;
-        const zBase = zi * gridCellSize;
+    const xSlots = Math.floor(floorWidth / xStep) + 1;
+    const zSlots = Math.floor(seaweedLoopLength / zStep);
 
-        // Slight offset from exact intersection for natural feel
-        const xJitter = (seededRandom(seed * 23) - 0.5) * 0.3;
-        const zJitter = (seededRandom(seed * 29) - 0.5) * 0.3;
+    for (let zi = 0; zi < zSlots; zi++) {
+      for (let xi = 0; xi < xSlots; xi++) {
+        const seed = zi * 1000 + xi;
+        const baseX = (xi / (xSlots - 1)) * floorWidth - halfWidth;
+        const baseZ = zi * zStep;
 
-        strands.push({
-          x: x + xJitter,
-          zOffset: zBase + zJitter,
-          height: 1.8 + seededRandom(seed * 43) * 2.2,
-          phase: seededRandom(seed * 47) * Math.PI * 2,
-          thickness: 0.06 + seededRandom(seed * 53) * 0.08,
+        // Keep the central "lane" a bit clearer so the jelly reads clean
+        const centerClear =
+          Math.abs(baseX) < 6 ? 0.35 : Math.abs(baseX) < 12 ? 0.18 : 0.0;
+
+        // Density varies with x and some clumping so it feels natural, not a grid
+        const edgeBias = Math.min(1, Math.abs(baseX) / halfWidth);
+        const clump = 0.6 + seededRandom(seed * 71) * 0.6;
+        const density =
+          (0.11 + edgeBias * 0.16 + seededRandom(seed * 19) * 0.08 - centerClear) * clump;
+
+        if (seededRandom(seed * 17) > density) continue;
+
+        const xJitter = (seededRandom(seed * 23) - 0.5) * 0.9;
+        const zJitter = (seededRandom(seed * 29) - 0.5) * 0.9;
+
+        const height = 1.2 + seededRandom(seed * 43) * 3.4;
+        const thickness = 0.09 + seededRandom(seed * 53) * 0.12;
+
+        weeds.push({
+          x: baseX + xJitter,
+          zOffset: baseZ + zJitter,
+          height,
+          thickness,
+          seed: seededRandom(seed * 61) * 1000,
+          yaw: (seededRandom(seed * 67) - 0.5) * Math.PI * 0.35,
         });
       }
     }
-    return strands;
-  }, [gridCellSize]);
 
-  // Per-seaweed materials
-  const seaweedMaterials = useMemo(() => {
-    return seaweeds.map((weed) => {
-      return new THREE.ShaderMaterial({
-        uniforms: {
-          uTime: { value: 0 },
-          uDecay: { value: 0 },
-          uPhase: { value: weed.phase },
-        },
-        vertexShader: `
-          uniform float uTime;
-          uniform float uPhase;
+    return weeds;
+  }, [floorWidth, gridCellSize, seaweedLoopLength]);
 
-          varying float vProgress;
-          varying vec3 vNormal;
+  const seaweedGeometry = useMemo(() => {
+    const segs = 12;
+    const geom = new THREE.CylinderGeometry(1, 1, 1, 5, segs, true);
+    geom.translate(0, 0.5, 0);
+    geom.computeVertexNormals();
+    return geom;
+  }, []);
 
-          void main() {
-            float t = uv.y;
-            vProgress = t;
-            vNormal = normalMatrix * normal;
+  const seaweedMaterial = useMemo(() => {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uDecay: { value: 0 },
+        uTravel: { value: 0 },
+        uSpeed: { value: 0 },
+        uBaseZStart: { value: 0 },
+        uFloorHeightScale: { value: floorHeightScale },
+        uLoopLength: { value: seaweedLoopLength },
+      },
+      vertexShader: `
+        uniform float uTime;
+        uniform float uDecay;
+        uniform float uTravel;
+        uniform float uSpeed;
+        uniform float uBaseZStart;
+        uniform float uFloorHeightScale;
+        uniform float uLoopLength;
 
-            float swayPhase = uTime * 1.5 + uPhase + t * 2.0;
-            float sway = sin(swayPhase) * 0.3 * t * t;
-            float secondarySway = sin(swayPhase * 1.7 + 1.0) * 0.15 * t;
-            float zSway = sin(swayPhase * 0.8) * 0.1 * t;
+        attribute float aZOffset;
+        attribute float aSeed;
 
-            vec3 animatedPos = position;
-            animatedPos.x += sway + secondarySway;
-            animatedPos.z += zSway;
+        varying float vProgress;
+        varying float vSeed;
+        varying vec3 vNormal;
+        varying vec3 vWorldPos;
 
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(animatedPos, 1.0);
+        float pmod(float x, float m) {
+          return mod(mod(x, m) + m, m);
+        }
+
+        float hash21(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+        }
+
+        float valueNoise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+
+          float a = hash21(i);
+          float b = hash21(i + vec2(1.0, 0.0));
+          float c = hash21(i + vec2(0.0, 1.0));
+          float d = hash21(i + vec2(1.0, 1.0));
+
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+        }
+
+        float noiseAt(float x, float z0, float cell) {
+          return valueNoise(vec2(x / cell, z0 / cell));
+        }
+
+        float terrainHeight(float x, float z) {
+          float n = 0.0;
+          float amp = 0.55;
+          float cell = 34.0;
+          for (int i = 0; i < 5; i++) {
+            float v = noiseAt(x, z, cell) * 2.0 - 1.0;
+            n += v * amp;
+            amp *= 0.5;
+            cell *= 0.5;
           }
-        `,
-        fragmentShader: `
-          uniform float uDecay;
 
-          varying float vProgress;
-          varying vec3 vNormal;
+          float basins = noiseAt(x + 70.0, z - 120.0, 90.0);
+          float h = n * 0.55 + 0.52;
+          h -= (1.0 - basins) * 0.12;
+          h = clamp(h, 0.0, 1.0);
+          return h;
+        }
 
-          void main() {
-            vec3 baseColor = vec3(0.02, 0.15, 0.1);
-            vec3 tipColor = vec3(0.05, 0.35, 0.25);
-            vec3 glowColor = vec3(0.1, 0.6, 0.4);
+        float hash11(float p) {
+          return fract(sin(p) * 43758.5453123);
+        }
 
-            vec3 color = mix(baseColor, tipColor, vProgress);
-            color = mix(color, glowColor, uDecay * 0.4 * vProgress);
+        vec2 dirFromSeed(float seed, float i) {
+          float a = (hash11(seed + i * 19.0) * 2.0 - 1.0) * 1.25;
+          return normalize(vec2(cos(a), sin(a)));
+        }
 
-            vec3 viewDir = vec3(0.0, 0.0, 1.0);
-            float rim = 1.0 - abs(dot(vNormal, viewDir));
-            color += vec3(0.0, 0.2, 0.15) * rim * 0.3;
+        void main() {
+          float t = clamp(position.y, 0.0, 1.0);
+          vec3 localPos = position;
 
-            float alpha = 0.7 - vProgress * 0.3;
-            gl_FragColor = vec4(color, alpha);
+          // Taper
+          float taper = mix(1.0, 0.25, pow(t, 1.4));
+          localPos.x *= taper;
+          localPos.z *= taper;
+
+          vec4 instanced = instanceMatrix * vec4(localPos, 1.0);
+          vec3 instancePos = instanceMatrix[3].xyz;
+
+          float zBelt = pmod(aZOffset + uTravel, uLoopLength);
+          float centeredZ = zBelt - uLoopLength * 0.5;
+          float terrainZ = uBaseZStart + zBelt;
+          float seed = aSeed;
+
+          float ground = terrainHeight(instancePos.x, terrainZ);
+          float groundLift = ground * uFloorHeightScale + 0.03;
+
+          vProgress = t;
+          vSeed = seed;
+
+          // Hard-corner bends: piecewise linear offsets per segment
+          float offsetX = 0.0;
+          float offsetZ = 0.0;
+
+          const int SEG = 6;
+          for (int ii = 0; ii < SEG; ii++) {
+            float i = float(ii);
+            float start = i / float(SEG);
+            float end = (i + 1.0) / float(SEG);
+            float localT = clamp((t - start) / (end - start), 0.0, 1.0);
+
+            vec2 d = dirFromSeed(seed, i);
+
+            float ampBase = (i + 1.0) / float(SEG);
+            ampBase = ampBase * ampBase;
+            float ampRand = mix(0.12, 0.42, hash11(seed + i * 31.0));
+            float speed01 = clamp((uSpeed - 5.0) / 80.0, 0.0, 1.0);
+            float beat = uDecay * 0.6;
+
+            float sway = sin(uTime * (0.9 + hash11(seed) * 0.8) + i * 1.7 + seed) * (0.05 + beat * 0.08 + speed01 * 0.06);
+
+            float amp = (ampRand + sway) * ampBase;
+            offsetX += d.x * amp * localT;
+            offsetZ += d.y * amp * localT;
           }
-        `,
-        transparent: true,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      });
-    });
-  }, [seaweeds]);
 
-  // Update seaweed uniforms
-  seaweedMaterials.forEach((mat) => {
-    mat.uniforms.uTime.value = time;
-    mat.uniforms.uDecay.value = pulse;
-  });
+          instanced.x += offsetX;
+          instanced.z += offsetZ + centeredZ;
+          instanced.y += groundLift;
 
-  // Static seaweed geometries
-  const seaweedGeometries = useMemo(() => {
-    return seaweeds.map((weed) => {
-      const segments = 12;
-      const points: THREE.Vector3[] = [];
-      for (let j = 0; j <= segments; j++) {
-        const t = j / segments;
-        points.push(new THREE.Vector3(0, t * weed.height, 0));
-      }
-      const curve = new THREE.CatmullRomCurve3(points);
-      return new THREE.TubeGeometry(curve, 8, weed.thickness, 6, false);
+          vec4 world = modelMatrix * vec4(instanced.xyz, 1.0);
+          vWorldPos = world.xyz;
+
+          vNormal = normalize(mat3(modelViewMatrix * instanceMatrix) * normal);
+
+          gl_Position = projectionMatrix * viewMatrix * world;
+        }
+      `,
+      fragmentShader: `
+        uniform float uDecay;
+        uniform float uSpeed;
+
+        varying float vProgress;
+        varying float vSeed;
+        varying vec3 vNormal;
+        varying vec3 vWorldPos;
+
+        float hash11(float p) {
+          return fract(sin(p) * 43758.5453123);
+        }
+
+        void main() {
+          float distZ = abs(vWorldPos.z);
+          float distX = abs(vWorldPos.x);
+          float distFade = smoothstep(92.0, 16.0, distZ) * smoothstep(44.0, 10.0, distX);
+
+          float hue = hash11(vSeed) * 0.12;
+          vec3 baseColor = vec3(0.01, 0.08, 0.06) + vec3(0.0, hue, hue * 0.5);
+          vec3 tipColor = vec3(0.04, 0.42, 0.28) + vec3(hue * 0.2, hue * 0.6, hue * 0.1);
+          vec3 glowColor = vec3(0.15, 0.85, 0.55);
+          vec3 beatAccent = vec3(0.55, 0.0, 0.8);
+
+          vec3 color = mix(baseColor, tipColor, pow(vProgress, 1.15));
+
+          float speed01 = clamp((uSpeed - 5.0) / 80.0, 0.0, 1.0);
+          float glow = (uDecay * 0.55 + speed01 * 0.18) * pow(vProgress, 1.5);
+          color = mix(color, glowColor, glow);
+          color += beatAccent * uDecay * 0.16 * pow(vProgress, 1.8);
+
+          vec3 viewDir = vec3(0.0, 0.0, 1.0);
+          float rim = 1.0 - abs(dot(normalize(vNormal), viewDir));
+          color += vec3(0.0, 0.18, 0.14) * rim * 0.45;
+
+          // Slight banding keeps it "low-poly game" even with shader glow
+          float band = floor(vProgress * 7.0) / 7.0;
+          color *= 0.9 + band * 0.22;
+
+          color *= distFade;
+          color += vec3(0.0, 0.01, 0.02) * (1.0 - distFade);
+
+          gl_FragColor = vec4(color, 1.0);
+        }
+      `,
+      transparent: false,
+      depthWrite: true,
+      depthTest: true,
+      side: THREE.DoubleSide,
     });
-  }, [seaweeds]);
+  }, [floorHeightScale, seaweedLoopLength]);
+
+  seaweedMaterial.uniforms.uTime.value = time;
+  seaweedMaterial.uniforms.uDecay.value = pulse;
+  seaweedMaterial.uniforms.uTravel.value = travel;
+  seaweedMaterial.uniforms.uSpeed.value = throttle;
+  seaweedMaterial.uniforms.uBaseZStart.value = 0;
+
+  const seaweedMesh = useMemo(() => {
+    const count = seaweedInstances.length;
+
+    const geom = seaweedGeometry.clone();
+    const zOffsets = new Float32Array(count);
+    const seeds = new Float32Array(count);
+
+    const mesh = new THREE.InstancedMesh(geom, seaweedMaterial, count);
+    mesh.frustumCulled = false;
+    mesh.renderOrder = -9;
+    mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+
+    const tmp = new THREE.Object3D();
+
+    for (let i = 0; i < count; i++) {
+      const w = seaweedInstances[i];
+      zOffsets[i] = w.zOffset;
+      seeds[i] = w.seed;
+
+      tmp.position.set(w.x, floorY, 0);
+      tmp.rotation.set(0, w.yaw, 0);
+      tmp.scale.set(w.thickness, w.height, w.thickness);
+      tmp.updateMatrix();
+      mesh.setMatrixAt(i, tmp.matrix);
+    }
+
+    geom.setAttribute("aZOffset", new THREE.InstancedBufferAttribute(zOffsets, 1));
+    geom.setAttribute("aSeed", new THREE.InstancedBufferAttribute(seeds, 1));
+    mesh.instanceMatrix.needsUpdate = true;
+
+    return mesh;
+  }, [floorY, seaweedGeometry, seaweedInstances, seaweedMaterial]);
 
   return (
     <group>
@@ -575,16 +752,8 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
         );
       })}
 
-      {/* Seaweed strands - GPU-animated sway, aligned to grid intersections */}
-      {seaweedGeometries.map((geom, i) => {
-        // Offset -100 (= 40 × 2.5) ensures grid alignment
-        const z = ((seaweeds[i].zOffset + travel) % seaweedLoopLength) - 100;
-        return (
-          <mesh key={`weed-${i}`} position={[seaweeds[i].x, -5, z]} geometry={geom}>
-            <primitive object={seaweedMaterials[i]} attach="material" />
-          </mesh>
-        );
-      })}
+      {/* Seaweed - instanced, terrain-attached */}
+      <primitive object={seaweedMesh} />
 
       {/* Ambient deep glow from below */}
       <pointLight position={[0, -8, 0]} intensity={0.4} color="#003344" distance={40} />
