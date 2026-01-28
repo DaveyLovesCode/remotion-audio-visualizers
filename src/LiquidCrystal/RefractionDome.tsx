@@ -204,22 +204,22 @@ export const RefractionDome: React.FC<RefractionDomeProps> = ({
           // === REFRACTION/DISTORTION ===
 
           // Base refraction from normal (like real glass)
-          float ior = 1.05; // Index of refraction - subtle
+          float ior = 1.04;
           vec3 refractDir = refract(-vViewDir, vNormal, 1.0 / ior);
-          vec2 normalDistort = refractDir.xy * 0.08;
+          vec2 normalDistort = refractDir.xy * 0.055;
 
-          // Volumetric cloudiness - single noise sample, derive variations from it
-          vec3 cloudPos = vWorldPosition * 2.5 + vec3(uTime * 0.15, uTime * 0.1, uTime * 0.12);
+          // Volumetric cloudiness - single noise sample
+          vec3 cloudPos = vWorldPosition * 2.2 + vec3(uTime * 0.12, uTime * 0.09, uTime * 0.1);
           float cloudNoise = noise3D(cloudPos);
 
-          // Flowing distortion - cheap sin/cos instead of noise
+          // Flowing distortion
           vec2 flowDistort = vec2(
-            sin(cloudPos.x * 2.0 + cloudPos.z + uTime * 0.3) * 0.5 + cloudNoise - 0.5,
-            cos(cloudPos.y * 2.0 + cloudPos.x + uTime * 0.25) * 0.5 + cloudNoise - 0.5
-          ) * 0.1;
+            sin(cloudPos.x * 1.7 + cloudPos.z + uTime * 0.25) * 0.45 + cloudNoise - 0.5,
+            cos(cloudPos.y * 1.7 + cloudPos.x + uTime * 0.2) * 0.45 + cloudNoise - 0.5
+          ) * 0.07;
 
-          // Pulse-reactive warping - more distortion on beats
-          float pulseWarp = uPulse * 0.06;
+          // Pulse-reactive warping
+          float pulseWarp = uPulse * 0.04;
           vec2 pulseDistort = vec2(
             sin(vPosition.x * 5.0 + uPulsePhase * 3.0),
             cos(vPosition.y * 5.0 + uPulsePhase * 2.0)
@@ -261,7 +261,7 @@ export const RefractionDome: React.FC<RefractionDomeProps> = ({
           surfaceColor = mix(surfaceColor, pulseColor, pulseIntensity * verticalGrad);
 
           // Rim light
-          surfaceColor += rimColor * fresnel * (0.4 + uPulse * 0.6);
+          surfaceColor += rimColor * fresnel * (0.32 + uPulse * 0.45);
 
           // Internal veins
           float veinPattern = sin(vPosition.x * 15.0 + uTime * 2.0 + uPulsePhase) *
@@ -278,11 +278,11 @@ export const RefractionDome: React.FC<RefractionDomeProps> = ({
           vec3 finalColor = mix(bgColor, surfaceColor, surfaceOpacity);
 
           // Add glow on top
-          finalColor += surfaceColor * fresnel * 0.4;
+          finalColor += surfaceColor * fresnel * 0.3;
 
           // Subtle iridescence
-          float iridescence = sin(fresnel * 6.0 + uTime * 0.5) * 0.1;
-          finalColor += vec3(0.1, 0.0, 0.15) * iridescence * fresnel;
+          float iridescence = sin(fresnel * 5.0 + uTime * 0.4) * 0.07;
+          finalColor += vec3(0.09, 0.0, 0.12) * iridescence * fresnel;
 
           // Alpha - solid but with depth
           float alpha = 0.85 + fresnel * 0.15;
