@@ -1,4 +1,4 @@
-export { LiquidCrystal } from "./LiquidCrystal";
+export { Scene } from "./Scene";
 export { JellyfishCore } from "./JellyfishCore";
 export { Tendrils } from "./Tendrils";
 export { OceanEnvironment } from "./OceanEnvironment";

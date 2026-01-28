@@ -1,4 +1,4 @@
-import { useAudioTrigger } from "../audio";
+import { useTriggerReactor } from "../audio/reactors";
 import type { AudioFrame } from "../audio/types";
 
 interface CausticOverlayProps {
@@ -20,10 +20,8 @@ export const CausticOverlay: React.FC<CausticOverlayProps> = ({
   const pulse = audioFrame.pulse ?? 0;
 
   // Beat flash trigger - longer decay for sustained flash
-  const { intensity: flashIntensity } = useAudioTrigger({
-    value: audioFrame.bass,
+  const { intensity: flashIntensity } = useTriggerReactor(audioFrame.bass, time, {
     threshold: 0.45,
-    time,
     decayDuration: 0.3,
   });
 

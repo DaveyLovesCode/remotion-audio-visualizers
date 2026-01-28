@@ -1,6 +1,6 @@
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
-import { useAudioTrigger } from "../audio";
+import { useTriggerReactor } from "../audio/reactors";
 import type { AudioFrame } from "../audio/types";
 
 interface DomeRippleProps {
@@ -38,10 +38,8 @@ export const DomeRipple: React.FC<DomeRippleProps> = ({
   lastTimeRef.current = time;
 
   // Trigger on bass
-  const { justTriggered } = useAudioTrigger({
-    value: audioFrame.bass,
+  const { justTriggered } = useTriggerReactor(audioFrame.bass, time, {
     threshold: 0.35,
-    time,
     decayDuration: WAVE_DURATION,
   });
 

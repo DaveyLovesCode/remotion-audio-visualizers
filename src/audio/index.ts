@@ -1,5 +1,3 @@
 export * from "./types";
-export * from "./mockAudioData";
-export * from "./useAudioAnalysis";
-export * from "./useAudioTrigger";
 export * from "./reactors";
+export * from "./useWebAudio";

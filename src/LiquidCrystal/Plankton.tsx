@@ -1,7 +1,7 @@
 import { useMemo, useRef, useEffect } from "react";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { useAudioTrigger } from "../audio";
+import { useTriggerReactor } from "../audio/reactors";
 import type { AudioFrame } from "../audio/types";
 
 interface PlanktonProps {
@@ -257,10 +257,8 @@ export const Plankton: React.FC<PlanktonProps> = ({
   lastTimeRef.current = time;
 
   // Rising-edge beat detection using centralized hook
-  const { justTriggered } = useAudioTrigger({
-    value: audioFrame.bass,
+  const { justTriggered } = useTriggerReactor(audioFrame.bass, time, {
     threshold: 0.4,
-    time,
     decayDuration: 2.0,
   });
 

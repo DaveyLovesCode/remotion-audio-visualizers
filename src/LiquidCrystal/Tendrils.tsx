@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, type RefObject } from "react";
 import * as THREE from "three";
-import { useAudioTrigger } from "../audio";
+import { useTriggerReactor } from "../audio/reactors";
 import type { AudioFrame } from "../audio/types";
 
 interface TendrilsProps {
@@ -231,10 +231,8 @@ export const Tendrils: React.FC<TendrilsProps> = ({
   const pulse = audioFrame.pulse ?? 0;
 
   // Energy wave trigger
-  const { intensity: waveIntensity, triggerTime } = useAudioTrigger({
-    value: audioFrame.bass,
+  const { intensity: waveIntensity, triggerTime } = useTriggerReactor(audioFrame.bass, time, {
     threshold: 0.4,
-    time,
     decayDuration: WAVE_DURATION,
   });
 

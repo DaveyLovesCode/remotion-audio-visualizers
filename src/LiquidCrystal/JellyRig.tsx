@@ -118,7 +118,7 @@ export const JellyRig: React.FC<JellyRigProps> = ({
   const bodyRoll = bodyRollRef.current.value + rollWobble;
 
   return (
-    <group ref={rootRef} position={[x, y, 0]}>
+    <group ref={rootRef as React.Ref<THREE.Group>} position={[x, y, 0]}>
       <group
         rotation={[pitchBase + pitchWobble, bodyYaw, bodyRoll]}
         scale={baseScale * beatPunch}
@@ -127,7 +127,7 @@ export const JellyRig: React.FC<JellyRigProps> = ({
         <group rotation={[0, headExtraYaw, 0]}>
           <RefractionDome frame={frame} audioFrame={audioFrame} fps={fps} />
           <DomeRipple frame={frame} audioFrame={audioFrame} fps={fps} />
-          <group ref={tendrilAnchorRef} position={[0, -0.3, 0]} />
+          <group ref={tendrilAnchorRef as React.Ref<THREE.Group>} position={[0, -0.3, 0]} />
         </group>
       </group>
     </group>
