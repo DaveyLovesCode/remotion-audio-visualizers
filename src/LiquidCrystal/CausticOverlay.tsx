@@ -29,11 +29,6 @@ export const CausticOverlay: React.FC<CausticOverlayProps> = ({
 
   const flashOpacity = flashIntensity * 0.25;
 
-  // Caustic animation - MORE INTENSE
-  const causticPhase1 = time * 1.5;
-  const causticPhase2 = time * 1.2 + 2;
-  const causticPhase3 = time * 0.8 + 4;
-  const causticScale = 1 + pulse * 0.15;
 
   // Chromatic aberration intensity
   const chromaIntensity = pulse * 8;
@@ -43,39 +38,6 @@ export const CausticOverlay: React.FC<CausticOverlayProps> = ({
 
   return (
     <>
-      {/* CAUSTIC LIGHT PATTERNS - Multiple layers */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          opacity: 0.2 + pulse * 0.25,
-          mixBlendMode: "screen",
-          background: `
-            radial-gradient(
-              ellipse at ${50 + Math.sin(causticPhase1) * 30}% ${50 + Math.cos(causticPhase1 * 0.7) * 25}%,
-              rgba(0, 255, 200, 0.5) 0%,
-              transparent 40%
-            ),
-            radial-gradient(
-              ellipse at ${50 + Math.sin(causticPhase2) * 35}% ${50 + Math.cos(causticPhase2 * 0.8) * 30}%,
-              rgba(0, 180, 255, 0.4) 0%,
-              transparent 35%
-            ),
-            radial-gradient(
-              ellipse at ${50 + Math.cos(causticPhase3 * 1.2) * 25}% ${50 + Math.sin(causticPhase3 * 0.9) * 35}%,
-              rgba(150, 0, 255, 0.3) 0%,
-              transparent 30%
-            ),
-            radial-gradient(
-              ellipse at ${50 + Math.cos(causticPhase1 * 0.5) * 40}% ${50 + Math.sin(causticPhase2 * 0.6) * 40}%,
-              rgba(0, 255, 150, 0.25) 0%,
-              transparent 45%
-            )
-          `,
-          transform: `scale(${causticScale})`,
-        }}
-      />
 
       {/* CHROMATIC ABERRATION - Color channel split on beats */}
       <div
