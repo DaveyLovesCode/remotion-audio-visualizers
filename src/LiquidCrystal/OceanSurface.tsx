@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import * as THREE from "three";
 import type { AudioFrame } from "../audio/types";
 
@@ -85,9 +85,9 @@ export const OceanSurface: React.FC<OceanSurfaceProps> = ({
           // Caustic-like bright spots from wave focusing
           float caustic = pow(max(dot(reflect(-toSun, vNormal), viewDir), 0.0), 8.0);
 
-          // Base water color - deep blue-green
-          vec3 deepColor = vec3(0.0, 0.04, 0.08);
-          vec3 surfaceColor = vec3(0.02, 0.12, 0.18);
+          // Base water color - brighter blue-green
+          vec3 deepColor = vec3(0.01, 0.06, 0.12);
+          vec3 surfaceColor = vec3(0.04, 0.18, 0.26);
           vec3 sunColor = vec3(0.95, 0.9, 0.7);
           vec3 causticColor = vec3(0.6, 0.85, 0.9);
 
@@ -108,7 +108,7 @@ export const OceanSurface: React.FC<OceanSurfaceProps> = ({
           // Fade at edges
           float edgeFade = 1.0 - smoothstep(40.0, 75.0, length(vWorldPos.xz));
 
-          float alpha = (0.275 + fresnel * 0.44 + transmission * 0.22) * edgeFade;
+          float alpha = (0.35 + fresnel * 0.5 + transmission * 0.28) * edgeFade;
 
           gl_FragColor = vec4(color, alpha);
         }
@@ -122,68 +122,135 @@ export const OceanSurface: React.FC<OceanSurfaceProps> = ({
   surfaceMaterial.uniforms.uTime.value = time;
   surfaceMaterial.uniforms.uPulse.value = pulse;
 
-  // God rays - volumetric light beams from surface, distributed all around
-  const rayCount = 12;
+  // God rays - clustered groups, all angled towards sun
   const rays = useMemo(() => {
-    return Array.from({ length: rayCount }, (_, i) => {
-      const angle = (i / rayCount) * Math.PI * 2;
-      const radius = 8 + Math.sin(i * 2.7) * 6;
-      return {
-        x: Math.cos(angle) * radius,
-        z: Math.sin(angle) * radius,
-        width: 1.8 + Math.sin(i * 3.7) * 1.0,
-        intensity: 0.6 + Math.sin(i * 1.9) * 0.3,
-        phase: i * 1.7,
-      };
+    // Consistent tilt towards sun
+    const tiltX = -0.04;
+    const tiltZ = 0.06;
+
+    const seededRandom = (seed: number) => {
+      const x = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
+      return x - Math.floor(x);
+    };
+
+    const allRays: {
+      x: number;
+      z: number;
+      topWidth: number;
+      length: number;
+      tiltX: number;
+      tiltZ: number;
+      phase: number;
+      brightness: number;
+    }[] = [];
+
+    // Define cluster centers - tight clumps with many rays
+    const clusters = [
+      { cx: 1, cz: 0, count: 12, spread: 1.5 },   // Main center cluster
+      { cx: 4, cz: 2, count: 10, spread: 1.2 },   // Near sun
+      { cx: -3, cz: -2, count: 10, spread: 1.3 }, // Left front
+      { cx: -2, cz: 4, count: 8, spread: 1.2 },   // Left back
+      { cx: 5, cz: -3, count: 8, spread: 1.0 },   // Right front
+      { cx: -5, cz: 1, count: 7, spread: 1.0 },   // Far left
+      { cx: 2, cz: -5, count: 7, spread: 1.0 },   // Front
+      { cx: 0, cz: 5, count: 6, spread: 1.0 },    // Back
+    ];
+
+    let seed = 0;
+    clusters.forEach((cluster) => {
+      for (let i = 0; i < cluster.count; i++) {
+        seed++;
+        // Position within cluster
+        const offsetX = (seededRandom(seed * 7) - 0.5) * cluster.spread * 2;
+        const offsetZ = (seededRandom(seed * 11) - 0.5) * cluster.spread * 2;
+
+        const x = cluster.cx + offsetX;
+        const z = cluster.cz + offsetZ;
+
+        // Lengths (12-22 units)
+        const length = 12 + seededRandom(seed * 17) * 10;
+
+        // Wider beams (2.5-5.0)
+        const topWidth = 2.5 + seededRandom(seed * 23) * 2.5;
+
+        // Brightness
+        const brightness = 0.7 + seededRandom(seed * 31) * 0.3;
+
+        allRays.push({
+          x,
+          z,
+          topWidth,
+          length,
+          tiltX,
+          tiltZ,
+          phase: seededRandom(seed * 37) * 10,
+          brightness,
+        });
+      }
     });
+
+    return allRays;
   }, []);
 
+  // Ray material - plane that tapers to point via shader
   const rayMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
         uPulse: { value: 0 },
+        uBrightness: { value: 1.0 },
+        uLength: { value: 1.0 },
       },
       vertexShader: `
+        uniform float uLength;
+
         varying vec2 vUv;
-        varying float vWorldY;
+        varying vec3 vWorldPos;
 
         void main() {
           vUv = uv;
-          vec4 worldPos = modelMatrix * vec4(position, 1.0);
-          vWorldY = worldPos.y;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+
+          // Taper: narrow at bottom (uv.y=0), wide at top (uv.y=1)
+          float taper = uv.y;
+          vec3 pos = position;
+          pos.x *= taper;
+
+          vWorldPos = (modelMatrix * vec4(pos, 1.0)).xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
         }
       `,
       fragmentShader: `
         uniform float uTime;
         uniform float uPulse;
+        uniform float uBrightness;
 
         varying vec2 vUv;
-        varying float vWorldY;
+        varying vec3 vWorldPos;
 
         void main() {
-          // Fade from top (bright) to bottom (dim)
-          float verticalFade = smoothstep(-5.0, 20.0, vWorldY);
+          // t: 0 at top, 1 at bottom tip
+          float t = 1.0 - vUv.y;
 
-          // Fade at horizontal edges of beam
+          // Vertical fade - bright at top, fades to point
+          float verticalFade = pow(1.0 - t, 0.8);
+
+          // Soft tip fade
+          float tipFade = smoothstep(0.0, 0.2, 1.0 - t);
+
+          // Horizontal fade from center - works with tapered geometry
           float centerDist = abs(vUv.x - 0.5) * 2.0;
-          float beamFade = 1.0 - pow(centerDist, 1.5);
+          float horizFade = 1.0 - smoothstep(0.6, 1.0, centerDist);
 
-          // Murky water scattering - particles in the beam
-          float scatter = sin(vUv.y * 40.0 + uTime * 0.5) * 0.5 + 0.5;
-          scatter *= sin(vUv.x * 20.0 + vUv.y * 15.0 - uTime * 0.3) * 0.5 + 0.5;
-          scatter = scatter * 0.3 + 0.7;
+          // Murky scattering
+          float scatter = sin(vWorldPos.y * 0.6 + uTime * 0.3) * 0.3 + 0.7;
 
-          // Color - warm white from sun
-          vec3 rayColor = vec3(0.85, 0.9, 0.75);
-          vec3 scatterColor = vec3(0.4, 0.6, 0.7);
-          vec3 color = mix(scatterColor, rayColor, verticalFade);
+          // Color gradient
+          vec3 topColor = vec3(1.0, 0.95, 0.7);
+          vec3 bottomColor = vec3(0.4, 0.6, 0.65);
+          vec3 color = mix(topColor, bottomColor, pow(t, 0.5));
 
-          // Audio reactivity - beams pulse brighter
-          float intensity = 0.088 + uPulse * 0.066;
-
-          float alpha = verticalFade * beamFade * scatter * intensity;
+          float intensity = (0.6 + uPulse * 0.2) * uBrightness;
+          float alpha = verticalFade * tipFade * horizFade * scatter * intensity;
 
           gl_FragColor = vec4(color, alpha);
         }
@@ -316,13 +383,21 @@ export const OceanSurface: React.FC<OceanSurfaceProps> = ({
   fogMaterial.uniforms.uTime.value = time;
   fogMaterial.uniforms.uPulse.value = pulse;
 
-  // Ray geometry - tall quads
-  const rayGeometry = useMemo(() => {
-    return new THREE.PlaneGeometry(1, 30, 1, 20);
-  }, []);
+  // Create materials for each ray (geometry is simple plane)
+  const rayMeshData = useMemo(() => {
+    return rays.map((ray) => {
+      const mat = rayMaterial.clone();
+      mat.uniforms.uLength.value = ray.length;
+      return { material: mat, ray };
+    });
+  }, [rays, rayMaterial]);
 
-  // Animated ray sway
-  const rayGroupRef = useRef<THREE.Group>(null);
+  // Update materials each frame
+  rayMeshData.forEach(({ material, ray }) => {
+    material.uniforms.uTime.value = time;
+    material.uniforms.uPulse.value = pulse;
+    material.uniforms.uBrightness.value = ray.brightness;
+  });
 
   return (
     <group>
@@ -334,22 +409,26 @@ export const OceanSurface: React.FC<OceanSurfaceProps> = ({
 
       {/* Water surface - centered above the scene */}
       <mesh position={[0, surfaceY, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[150, 150, 64, 64]} />
+        <planeGeometry args={[150, 150, 128, 128]} />
         <primitive object={surfaceMaterial} attach="material" />
       </mesh>
 
-      {/* God rays */}
-      <group ref={rayGroupRef}>
-        {rays.map((ray, i) => {
-          const sway = Math.sin(time * 0.2 + ray.phase) * 1.5;
+      {/* God rays - planes that taper to points */}
+      <group>
+        {rayMeshData.map(({ material, ray }, i) => {
+          // Organic sway
+          const swayX = Math.sin(time * 0.15 + ray.phase) * 0.8;
+          const swayZ = Math.cos(time * 0.12 + ray.phase * 0.7) * 0.6;
+
           return (
             <mesh
               key={i}
-              position={[ray.x + sway, surfaceY - 15, ray.z]}
-              scale={[ray.width, 1, 1]}
+              position={[ray.x + swayX, surfaceY - ray.length / 2, ray.z + swayZ]}
+              rotation={[ray.tiltX, 0, ray.tiltZ]}
+              frustumCulled={false}
             >
-              <primitive object={rayGeometry} attach="geometry" />
-              <primitive object={rayMaterial} attach="material" />
+              <planeGeometry args={[ray.topWidth, ray.length, 1, 16]} />
+              <primitive object={material} attach="material" />
             </mesh>
           );
         })}
