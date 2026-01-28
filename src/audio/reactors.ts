@@ -5,7 +5,7 @@
  * a transformed 0-1 output. The transformation defines the "feel" of the
  * reactivity.
  *
- * Remotion-compatible: handles out-of-order frame rendering by resetting
+ * the app-compatible: handles out-of-order frame rendering by resetting
  * state when time jumps backwards (seeking, looping, prefetch).
  */
 
@@ -75,7 +75,7 @@ export function usePulseReactor(
 
   const stateRef = useRef<PulseState>({ value: 0, lastTime: -Infinity });
 
-  // Reset if time jumped backwards (Remotion seeking/looping)
+  // Reset if time jumped backwards (the app seeking/looping)
   if (time < stateRef.current.lastTime - 0.05) {
     stateRef.current = { value: 0, lastTime: time };
   }
@@ -187,7 +187,7 @@ export function useTriggerReactor(
     stackedIntensity: 0,
   });
 
-  // Reset if time jumped backwards (Remotion seeking/looping)
+  // Reset if time jumped backwards (the app seeking/looping)
   if (time < stateRef.current.lastTime - 0.05) {
     stateRef.current = {
       wasAbove: false,

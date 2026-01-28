@@ -269,7 +269,7 @@ export const Tendrils: React.FC<TendrilsProps> = ({
     resetTokenRef.current++;
   }
 
-  // Detect loop/seek - reset if time goes backwards (Remotion seeking)
+  // Detect loop/seek - reset if time goes backwards
   if (time < lastTimeRef.current - 0.05 || time < simTimeRef.current - 0.05) {
     phaseRef.current = time * baseSpeed;
     simTimeRef.current = time;

@@ -250,7 +250,7 @@ export const Plankton: React.FC<PlanktonProps> = ({
   const wavesRef = useRef<Array<{ startTime: number }>>([]);
   const lastTimeRef = useRef(-Infinity);
 
-  // Remotion renders frames out of order - reset waves if time went backwards
+  // App renders frames out of order - reset waves if time went backwards
   if (time < lastTimeRef.current - 0.05) {
     wavesRef.current = [];
   }
@@ -269,7 +269,7 @@ export const Plankton: React.FC<PlanktonProps> = ({
     }
   }
 
-  // Remove old waves OR future waves (Remotion out-of-order rendering)
+  // Remove old waves OR future waves (App out-of-order rendering)
   wavesRef.current = wavesRef.current.filter(
     w => w.startTime <= time && time - w.startTime < 2.0
   );

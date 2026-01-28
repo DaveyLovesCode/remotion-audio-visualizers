@@ -13,5 +13,5 @@
     "declarationMap": true,
     "noEmit": true
   },
-  "include": ["src/**/*", "remotion.config.ts"]
+  "include": ["src/**/*"]
 }
