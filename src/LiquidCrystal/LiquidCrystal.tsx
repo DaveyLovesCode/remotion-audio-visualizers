@@ -9,6 +9,7 @@ import type { AudioFrame } from "../audio";
 import { JellyRig } from "./JellyRig";
 import { Tendrils } from "./Tendrils";
 import { OceanEnvironment } from "./OceanEnvironment";
+import { OceanSurface } from "./OceanSurface";
 import { CausticOverlay } from "./CausticOverlay";
 import { HolographicUI } from "./HolographicUI";
 
@@ -153,6 +154,7 @@ const Scene: React.FC<{
       {/* Accent from side */}
       <pointLight position={[4, 0, 2]} intensity={0.25} color="#ff00ff" />
 
+      <OceanSurface frame={frame} audioFrame={audioFrame} fps={fps} />
       <OceanEnvironment frame={frame} audioFrame={audioFrame} fps={fps} />
       <JellyRig frame={frame} audioFrame={audioFrame} fps={fps} rootRef={jellyRootRef} tendrilAnchorRef={tendrilAnchorRef} />
       <Tendrils frame={frame} audioFrame={audioFrame} fps={fps} count={14} anchorRef={tendrilAnchorRef} />
