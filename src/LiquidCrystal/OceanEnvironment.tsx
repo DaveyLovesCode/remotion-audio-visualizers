@@ -296,6 +296,7 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
   const tileWidth = 60;
   const numTiles = 4;
   const floorLoopLength = tileDepth * numTiles;
+  const tileFadeStartZ = 70;
 
   const hash2 = (x: number, z: number) => {
     const val = Math.sin(x * 127.1 + z * 311.7) * 43758.5453;
@@ -346,6 +347,8 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
       }
 
       geometry.computeVertexNormals();
+      geometry.computeBoundingSphere();
+      geometry.computeBoundingBox();
       return geometry;
     };
   }, [gridCellSize, tileDepth, tileWidth, totalCellsZ]);
@@ -361,6 +364,7 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
           uDecay: { value: 0 },
           uGridCellSize: { value: gridCellSize },
           uTileOffsetZ: { value: tileIndex * tileDepth },
+          uFadeStartZ: { value: tileFadeStartZ },
         },
         vertexShader: `
           uniform float uTileOffsetZ;
@@ -378,6 +382,7 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
         fragmentShader: `
           uniform float uDecay;
           uniform float uGridCellSize;
+          uniform float uFadeStartZ;
 
           varying vec3 vWorldPos;
           varying float vLocalZ;
@@ -385,7 +390,7 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
           void main() {
             float distZ = abs(vWorldPos.z);
             float distX = abs(vWorldPos.x);
-            float distFade = smoothstep(70.0, 15.0, distZ) * smoothstep(28.0, 10.0, distX);
+            float distFade = smoothstep(uFadeStartZ, 15.0, distZ) * smoothstep(28.0, 10.0, distX);
 
             float cellX = vWorldPos.x / uGridCellSize;
             float cellZ = vLocalZ / uGridCellSize;
@@ -415,10 +420,11 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
         `,
         transparent: true,
         depthWrite: true, // FIX: prevents transparency sorting flicker
-        side: THREE.DoubleSide,
+        depthTest: true,
+        side: THREE.FrontSide,
       });
     });
-  }, [gridCellSize, numTiles, tileDepth]);
+  }, [gridCellSize, numTiles, tileDepth, tileFadeStartZ]);
 
   tileMaterials.forEach((mat) => {
     mat.uniforms.uDecay.value = pulse;
@@ -736,16 +742,20 @@ export const OceanEnvironment: React.FC<OceanEnvironmentProps> = ({
       {/* Ocean floor - tiles that move and loop */}
       {tileGeometries.map((geom, i) => {
         const tileBaseZ = i * tileDepth;
+        // Wrap positions only when the entire tile is fully faded out.
+        // Otherwise the near edge is still visible at wrap time and "teleports" across the scene.
+        const wrapInvisibleZ = tileFadeStartZ + tileDepth / 2 + 1;
         const z =
-          ((tileBaseZ + travel) % floorLoopLength) -
-          floorLoopLength / 2 -
-          tileDepth / 2;
+          THREE.MathUtils.euclideanModulo(tileBaseZ + travel, floorLoopLength) -
+          (floorLoopLength - wrapInvisibleZ);
         return (
           <mesh
             key={`floor-tile-${i}`}
             position={[0, -5, z]}
             rotation={[-Math.PI / 2, 0, 0]}
             geometry={geom}
+            renderOrder={-10}
+            frustumCulled={false}
           >
             <primitive object={tileMaterials[i]} attach="material" />
           </mesh>
