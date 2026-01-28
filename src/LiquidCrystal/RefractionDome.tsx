@@ -306,7 +306,7 @@ export const RefractionDome: React.FC<RefractionDomeProps> = ({
 
   return (
     <mesh ref={meshRef}>
-      <sphereGeometry args={[1, 32, 32, Math.PI]} />
+      <sphereGeometry args={[1, 96, 96, Math.PI]} />
       <primitive object={shaderMaterial} attach="material" />
     </mesh>
   );
