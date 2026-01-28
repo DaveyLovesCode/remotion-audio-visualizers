@@ -21,7 +21,7 @@ export const OceanSurface: React.FC<OceanSurfaceProps> = ({
   const pulse = audioFrame.pulse ?? 0;
 
   const surfaceY = 22;
-  const sunPosition = useMemo(() => new THREE.Vector3(3, surfaceY + 5, -8), []);
+  const sunPosition = useMemo(() => new THREE.Vector3(5, surfaceY + 8, 3), []);
 
   // Water surface - animated waves with light transmission
   const surfaceMaterial = useMemo(() => {
@@ -106,9 +106,9 @@ export const OceanSurface: React.FC<OceanSurfaceProps> = ({
           color += vec3(0.15, 0.25, 0.3) * shimmer * 0.2;
 
           // Fade at edges
-          float edgeFade = 1.0 - smoothstep(30.0, 60.0, length(vWorldPos.xz));
+          float edgeFade = 1.0 - smoothstep(40.0, 75.0, length(vWorldPos.xz));
 
-          float alpha = (0.25 + fresnel * 0.4 + transmission * 0.2) * edgeFade;
+          float alpha = (0.275 + fresnel * 0.44 + transmission * 0.22) * edgeFade;
 
           gl_FragColor = vec4(color, alpha);
         }
@@ -122,16 +122,16 @@ export const OceanSurface: React.FC<OceanSurfaceProps> = ({
   surfaceMaterial.uniforms.uTime.value = time;
   surfaceMaterial.uniforms.uPulse.value = pulse;
 
-  // God rays - volumetric light beams from surface
-  const rayCount = 5;
+  // God rays - volumetric light beams from surface, distributed all around
+  const rayCount = 12;
   const rays = useMemo(() => {
     return Array.from({ length: rayCount }, (_, i) => {
-      const angle = (i / rayCount) * Math.PI * 2 + 0.3;
-      const radius = 4 + Math.sin(i * 2.7) * 3;
+      const angle = (i / rayCount) * Math.PI * 2;
+      const radius = 8 + Math.sin(i * 2.7) * 6;
       return {
-        x: Math.cos(angle) * radius + (Math.sin(i * 1.3) - 0.5) * 6,
-        z: Math.sin(angle) * radius - 12 + Math.cos(i * 2.1) * 4,
-        width: 1.5 + Math.sin(i * 3.7) * 0.8,
+        x: Math.cos(angle) * radius,
+        z: Math.sin(angle) * radius,
+        width: 1.8 + Math.sin(i * 3.7) * 1.0,
         intensity: 0.6 + Math.sin(i * 1.9) * 0.3,
         phase: i * 1.7,
       };
@@ -181,7 +181,7 @@ export const OceanSurface: React.FC<OceanSurfaceProps> = ({
           vec3 color = mix(scatterColor, rayColor, verticalFade);
 
           // Audio reactivity - beams pulse brighter
-          float intensity = 0.08 + uPulse * 0.06;
+          float intensity = 0.088 + uPulse * 0.066;
 
           float alpha = verticalFade * beamFade * scatter * intensity;
 
@@ -240,7 +240,7 @@ export const OceanSurface: React.FC<OceanSurfaceProps> = ({
           color *= 1.0 + uPulse * 0.2;
 
           float alpha = core + glow * 0.8 + shimmer * 0.15;
-          alpha *= 0.7; // Overall opacity - visible but not overwhelming
+          alpha *= 0.77; // Overall opacity - visible but not overwhelming
 
           gl_FragColor = vec4(color, alpha);
         }
@@ -299,10 +299,10 @@ export const OceanSurface: React.FC<OceanSurfaceProps> = ({
           float heightFade = smoothstep(-5.0, 18.0, vWorldPos.y);
 
           // Edge fade
-          float edgeFade = 1.0 - smoothstep(25.0, 50.0, length(vWorldPos.xz));
+          float edgeFade = 1.0 - smoothstep(35.0, 60.0, length(vWorldPos.xz));
 
-          float alpha = (0.15 - heightFade * 0.1) * edgeFade;
-          alpha += uPulse * 0.02; // Slightly denser on beats
+          float alpha = (0.165 - heightFade * 0.11) * edgeFade;
+          alpha += uPulse * 0.022; // Slightly denser on beats
 
           gl_FragColor = vec4(fogColor, alpha);
         }
@@ -332,9 +332,9 @@ export const OceanSurface: React.FC<OceanSurfaceProps> = ({
         <primitive object={sunMaterial} attach="material" />
       </mesh>
 
-      {/* Water surface */}
-      <mesh position={[0, surfaceY, -5]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[120, 120, 64, 64]} />
+      {/* Water surface - centered above the scene */}
+      <mesh position={[0, surfaceY, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[150, 150, 64, 64]} />
         <primitive object={surfaceMaterial} attach="material" />
       </mesh>
 
@@ -355,33 +355,33 @@ export const OceanSurface: React.FC<OceanSurfaceProps> = ({
         })}
       </group>
 
-      {/* Murky depth fog layer */}
-      <mesh position={[0, 8, -5]}>
-        <planeGeometry args={[100, 40]} />
+      {/* Murky depth fog - horizontal layer covering the scene */}
+      <mesh position={[0, 10, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[120, 120]} />
         <primitive object={fogMaterial} attach="material" />
       </mesh>
 
-      {/* Secondary fog layer closer */}
-      <mesh position={[0, 5, 5]} rotation={[0.1, 0, 0]}>
-        <planeGeometry args={[80, 25]} />
+      {/* Lower fog layer */}
+      <mesh position={[0, 4, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[100, 100]} />
         <primitive object={fogMaterial} attach="material" />
       </mesh>
 
       {/* Ambient light from above - sun glow */}
       <pointLight
         position={[sunPosition.x, surfaceY, sunPosition.z]}
-        intensity={0.8}
+        intensity={0.88}
         color="#fffae0"
-        distance={60}
+        distance={80}
         decay={1.5}
       />
 
-      {/* Diffuse light from surface */}
+      {/* Diffuse light from surface - centered */}
       <pointLight
         position={[0, surfaceY - 5, 0]}
-        intensity={0.3}
+        intensity={0.4}
         color="#4080a0"
-        distance={40}
+        distance={60}
       />
     </group>
   );
