@@ -225,6 +225,8 @@ interface UseAudioAnalysisOptions {
   fillGate?: GateConfig;
   /** Return debug info with raw peak values */
   _returnDebug?: boolean;
+  /** Frame offset into the audio file (for trimming start) */
+  frameOffset?: number;
 }
 
 /**
@@ -249,9 +251,11 @@ export function useAudioAnalysis({
   gate,
   fillGate = { floor: 0.2, ceiling: 0.6 },
   _returnDebug = false,
+  frameOffset = 0,
 }: UseAudioAnalysisOptions): AudioAnalysisResult {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const offsetFrame = frame + frameOffset;
 
   // Load audio data
   const audioData = useAudioData(src);
@@ -287,7 +291,7 @@ export function useAudioAnalysis({
     // Get raw audio samples and compute our own FFT
     // This matches Web Audio API behavior exactly (unlike Remotion's visualizeAudio)
     const channelData = audioData.channelWaveforms[0]; // Mono or left channel
-    const samples = getSamplesForFrame(channelData, audioData.sampleRate, frame, fps, numberOfSamples);
+    const samples = getSamplesForFrame(channelData, audioData.sampleRate, offsetFrame, fps, numberOfSamples);
     const frequencyData = computeFFT(samples, numberOfSamples);
 
     // Extract both averaged bands AND peak-based fill from the same FFT data
@@ -337,7 +341,7 @@ export function useAudioAnalysis({
     const _debug = _returnDebug ? { kickPeak: peakValues[bands[0]?.name] ?? 0 } : undefined;
 
     return { bands: bandValues, fill: fillValues, energy, isLoading: false, _debug };
-  }, [audioData, bandIndices, frame, fps, numberOfSamples, bands, gate, fillGate, _returnDebug]);
+  }, [audioData, bandIndices, offsetFrame, fps, numberOfSamples, bands, gate, fillGate, _returnDebug]);
 
   return result;
 }

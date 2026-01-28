@@ -1,7 +1,7 @@
 import { Composition } from "remotion";
 import { LiquidCrystal } from "./LiquidCrystal";
 
-const DURATION = 3600; // 60 seconds at 60fps
+const DURATION = 1916; // ~32 seconds at 60fps (after trimming first 28.07s)
 const FPS = 60;
 const WIDTH = 1920;
 const HEIGHT = 1080;

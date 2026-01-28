@@ -1,6 +1,5 @@
 import { ThreeCanvas } from "@remotion/three";
-import { useCurrentFrame, useVideoConfig, staticFile } from "remotion";
-import { Audio } from "@remotion/media";
+import { useCurrentFrame, useVideoConfig, staticFile, Audio } from "remotion";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useRef, useState, useEffect, type RefObject } from "react";
