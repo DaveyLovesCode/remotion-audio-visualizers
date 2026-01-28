@@ -27,6 +27,7 @@ interface UseWebAudioOptions {
   fftSize?: number;
   gate?: GateConfig;
   fillGate?: GateConfig;
+  visualLeadTime?: number; // seconds to delay audio (visuals react ahead)
 }
 
 const DEFAULT_BANDS: FrequencyBand[] = [
@@ -50,6 +51,7 @@ export function useWebAudio({
   fftSize = 4096,
   gate = { floor: 0.2, ceiling: 0.6 },
   fillGate = { floor: 0.89, ceiling: 0.99 },
+  visualLeadTime = 0,
 }: UseWebAudioOptions): WebAudioAnalysis {
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -100,7 +102,16 @@ export function useWebAudio({
 
     const source = audioContext.createMediaElementSource(audioElement);
     source.connect(analyser);
-    analyser.connect(audioContext.destination);
+
+    // Delay audio output so visuals react ahead of sound
+    if (visualLeadTime > 0) {
+      const delayNode = audioContext.createDelay(visualLeadTime);
+      delayNode.delayTime.value = visualLeadTime;
+      analyser.connect(delayNode);
+      delayNode.connect(audioContext.destination);
+    } else {
+      analyser.connect(audioContext.destination);
+    }
     sourceRef.current = source;
 
     frequencyDataRef.current = new Uint8Array(analyser.frequencyBinCount);
@@ -129,7 +140,7 @@ export function useWebAudio({
       analyser.disconnect();
       audioContext.close();
     };
-  }, [src, fftSize]); // Removed bands - it's stable
+  }, [src, fftSize, visualLeadTime]);
 
   // Analysis loop using requestAnimationFrame
   useEffect(() => {

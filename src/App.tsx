@@ -69,6 +69,7 @@ export const App: React.FC = () => {
     fftSize: 4096,
     gate: { floor: 0.2, ceiling: 0.6 },
     fillGate: { floor: 0.89, ceiling: 0.99 },
+    visualLeadTime: 0.05, // visuals react 50ms ahead of audio
   });
 
   // Update audio frame data and overlays at 60fps
